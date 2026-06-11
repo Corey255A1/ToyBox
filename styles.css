@@ -1,0 +1,510 @@
+/* =============================================
+   ToyBox — Global Design Tokens
+   ============================================= */
+
+:root {
+  /* Color Palette */
+  --color-bg-dark:      #1a1a2e;
+  --color-bg-mid:       #16213e;
+  --color-bg-card:      #0f3460;
+  --color-accent-1:     #e94560;   /* Hot coral/pink — primary CTA */
+  --color-accent-2:     #f5a623;   /* Warm amber — highlights */
+  --color-accent-3:     #4ade80;   /* Soft green — success states */
+  --color-text-primary: #ffffff;
+  --color-text-muted:   rgba(255, 255, 255, 0.6);
+
+  /* Typography */
+  --font-display: 'Nunito', system-ui, -apple-system, sans-serif;
+  --font-size-xl:   2.5rem;
+  --font-size-lg:   1.5rem;
+  --font-size-md:   1.125rem;
+  --font-size-sm:   0.875rem;
+
+  /* Spacing */
+  --space-xs: 0.5rem;
+  --space-sm: 1rem;
+  --space-md: 1.5rem;
+  --space-lg: 2.5rem;
+
+  /* Borders & Radii */
+  --radius-card:   1.25rem;
+  --radius-btn:    0.75rem;
+  --radius-full:   9999px;
+
+  /* Shadows */
+  --shadow-card: 0 8px 32px rgba(0,0,0,0.4);
+  --shadow-glow: 0 0 20px rgba(233, 69, 96, 0.4);
+}
+
+/* =============================================
+   Reset & Base
+   ============================================= */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;          /* Prevent scroll — this is a fullscreen app */
+  background: var(--color-bg-dark);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  touch-action: none;        /* Prevent browser default touch behaviors */
+}
+
+/* =============================================
+   App Shell
+   ============================================= */
+#app-shell {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, var(--color-bg-dark) 0%, var(--color-bg-mid) 100%);
+  transition: opacity 0.3s ease;
+}
+
+#app-shell.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* =============================================
+   Header Bar
+   ============================================= */
+.launcher-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.launcher-logo {
+  font-size: var(--font-size-xl);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  background: linear-gradient(90deg, var(--color-accent-1), var(--color-accent-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  user-select: none;
+}
+
+.btn-header-action {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #ffffff;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-btn);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-header-action:active {
+  background: rgba(255,255,255,0.2);
+}
+
+/* =============================================
+   Game Grid
+   ============================================= */
+.game-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-md);
+  padding: var(--space-md);
+  overflow-y: auto;
+  align-content: start;
+}
+
+/* =============================================
+   Game Tile — Live Preview Layout
+   ============================================= */
+.game-tile {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-card);
+  padding: 0;                /* Preview fills edge to edge */
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+  border: 1px solid rgba(255,255,255,0.08);
+  overflow: hidden;          /* Clip preview to rounded corners */
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+}
+
+.game-tile:active {
+  transform: scale(0.97);
+  box-shadow: var(--shadow-glow);
+}
+
+/* Preview canvas wrapper (8:5 aspect ratio) */
+.game-tile__preview-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 8 / 5;
+  overflow: hidden;
+  background: #0f3460;
+}
+
+.game-tile__preview-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Hover overlay showing ▶ play icon */
+.game-tile__play-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+
+.game-tile:hover .game-tile__play-overlay,
+.game-tile:focus .game-tile__play-overlay {
+  background: rgba(0,0,0,0.35);
+}
+
+.game-tile__play-icon {
+  font-size: 2.5rem;
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.8));
+}
+
+.game-tile:hover .game-tile__play-icon,
+.game-tile:focus .game-tile__play-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Footer bar: title + optional badges */
+.game-tile__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs) var(--space-sm);
+  gap: var(--space-xs);
+  background: rgba(0,0,0,0.25);
+}
+
+.game-tile__title {
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-tile__badge {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(255,255,255,0.12);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.game-tile__badge--ctrl {
+  background: rgba(74,222,128,0.15);
+  color: var(--color-accent-3);
+}
+
+/* =============================================
+   System Overlay (Exit Button, Canvas)
+   ============================================= */
+#game-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: 100vw;
+  height: 100vh;
+}
+
+#system-overlay {
+  position: fixed;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+#system-overlay.hidden {
+  display: none;
+}
+
+#system-overlay.controller-mode {
+  right: 50%;
+  transform: translateX(50%);
+}
+
+#btn-exit-game {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+#btn-exit-game:active {
+  background: var(--color-accent-1);
+}
+
+/* =============================================
+   Loading Spinner
+   ============================================= */
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 8888;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-dark);
+  gap: var(--space-sm);
+}
+
+.spinner {
+  width: 56px;
+  height: 56px;
+  border: 4px solid rgba(255,255,255,0.1);
+  border-top-color: var(--color-accent-1);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* =============================================
+   Parental PIN Entry Screen
+   ============================================= */
+.pin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(10, 10, 25, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+}
+
+.pin-dialog {
+  background: var(--color-bg-mid);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-card);
+  padding: var(--space-md);
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  box-shadow: var(--shadow-card);
+}
+
+.pin-dialog h2 {
+  font-size: var(--font-size-lg);
+  font-weight: 800;
+  text-align: center;
+}
+
+.pin-dots {
+  display: flex;
+  gap: 12px;
+  margin: var(--space-xs) 0;
+}
+
+.pin-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.3);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.pin-dot.filled {
+  background: var(--color-accent-1);
+  border-color: var(--color-accent-1);
+}
+
+.pin-dots.shake {
+  animation: shake 0.5s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.pin-numpad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.pin-key {
+  height: 52px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-btn);
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.pin-key:active {
+  background: rgba(255,255,255,0.16);
+}
+
+/* Empty button style for grid spacing */
+.pin-key[data-digit=""] {
+  visibility: hidden;
+}
+
+/* =============================================
+   Generic System Dialog (Win / Lose Overlays)
+   ============================================= */
+.system-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(10, 10, 25, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+}
+
+.system-dialog {
+  background: var(--color-bg-mid);
+  border: 2px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-card);
+  padding: var(--space-md);
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  box-shadow: var(--shadow-card);
+}
+
+.text-center {
+  text-align: center;
+}
+
+.dialog-graphic {
+  font-size: 4rem;
+  margin: var(--space-xs) 0;
+}
+
+.dialog-score {
+  font-size: var(--font-size-md);
+  color: var(--color-text-muted);
+}
+
+.dialog-buttons {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  margin-top: var(--space-xs);
+}
+
+.dialog-btn {
+  flex: 1;
+  height: 48px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: var(--radius-btn);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dialog-btn:active {
+  background: rgba(255,255,255,0.16);
+}
+
+.dialog-btn--primary {
+  background: var(--color-accent-1);
+  border-color: var(--color-accent-1);
+}
+
+.dialog-btn--primary:active {
+  background: #d63c55;
+}
+
+.animate-bounce-in {
+  animation: bounceIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes bounceIn {
+  from { opacity: 0; transform: scale(0.3); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Timer Dialog style */
+.timer-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: rgba(233, 69, 96, 0.9);
+  padding: 12px 24px;
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-card);
+  font-weight: 700;
+  animation: slideDown 0.4s ease-out;
+}
+
+@keyframes slideDown {
+  from { top: -60px; opacity: 0; }
+  to { top: 16px; opacity: 1; }
+}
+
+/* Import the settings panel styles */
+@import url('./engine/settings.css');
+@import url('./engine/controller.css');

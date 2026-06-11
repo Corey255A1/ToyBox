@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="description" content="ToyBox — A fun mini-game console for kids" />
+  <meta name="theme-color" content="#1a1a2e" />
+
+  <!-- PWA meta tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="/assets/icons/icon-192.png" />
+
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+  <title>ToyBox</title>
+</head>
+<body>
+
+  <!-- Host UI Layer -->
+  <div id="app-shell">
+    <!-- Rendered by app.js -->
+  </div>
+
+  <!-- Runtime Canvas Layer (hidden by default) -->
+  <canvas id="game-canvas" style="display:none;"></canvas>
+
+  <!-- System overlay: back button, volume, settings -->
+  <div id="system-overlay" class="hidden">
+    <button id="btn-exit-game" aria-label="Exit game">✕</button>
+  </div>
+
+  <!-- On-Screen Controller Overlay -->
+  <div id="controller-overlay" class="hidden" aria-hidden="true">
+    <!-- D-Pad -->
+    <div id="dpad" role="group" aria-label="Directional pad">
+      <button id="dpad-up"    class="dpad-btn dpad-up"    data-direction="up"    aria-label="Up"></button>
+      <button id="dpad-right" class="dpad-btn dpad-right" data-direction="right" aria-label="Right"></button>
+      <button id="dpad-down"  class="dpad-btn dpad-down"  data-direction="down"  aria-label="Down"></button>
+      <button id="dpad-left"  class="dpad-btn dpad-left"  data-direction="left"  aria-label="Left"></button>
+      <div class="dpad-center" aria-hidden="true"></div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div id="action-buttons" role="group" aria-label="Action buttons">
+      <button id="btn-b" class="action-btn action-btn--b" data-button="b" aria-label="B button">B</button>
+      <button id="btn-a" class="action-btn action-btn--a" data-button="a" aria-label="A button">A</button>
+    </div>
+  </div>
+
+
+  <!-- PixiJS (vendored locally) -->
+  <script src="/lib/pixi.min.js"></script>
+  <!-- Host application bootstrap -->
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

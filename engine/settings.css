@@ -1,0 +1,199 @@
+/* engine/settings.css */
+
+.settings-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 7777;
+  background: var(--color-bg-dark);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.settings-panel.open {
+  transform: translateX(0);
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+
+.settings-back-btn {
+  background: rgba(255,255,255,0.08);
+  border: none;
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.settings-back-btn:active { background: rgba(255,255,255,0.16); }
+
+.settings-title {
+  font-size: var(--font-size-lg);
+  font-weight: 900;
+}
+
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* ── Group ───────────────────────────────────────────────────────────────── */
+.settings-group {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.settings-group-title {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ── Setting Row ─────────────────────────────────────────────────────────── */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  gap: var(--space-sm);
+  min-height: 64px;
+}
+
+.settings-row:last-child { border-bottom: none; }
+
+.settings-row__label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-row__label {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.settings-row__desc {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* ── Toggle Switch ───────────────────────────────────────────────────────── */
+.toggle-switch {
+  position: relative;
+  width: 56px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.15);
+  border-radius: var(--radius-full);
+  transition: background 0.25s ease;
+  cursor: pointer;
+}
+
+.toggle-switch input:checked + .toggle-track {
+  background: var(--color-accent-3);
+}
+
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-radius: 50%;
+  top: 4px;
+  left: 4px;
+  transition: transform 0.25s ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.toggle-switch input:checked + .toggle-track::after {
+  transform: translateX(26px);
+}
+
+/* ── Range Slider ────────────────────────────────────────────────────────── */
+.settings-range {
+  width: 160px;
+  accent-color: var(--color-accent-1);
+  cursor: pointer;
+}
+
+/* ── Select Dropdown ─────────────────────────────────────────────────────── */
+.settings-select {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: var(--radius-btn);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: var(--font-size-sm);
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+}
+
+/* ── Danger Zone ─────────────────────────────────────────────────────────── */
+.settings-group--danger {
+  border-color: rgba(233, 69, 96, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-sm);
+  gap: var(--space-xs);
+}
+
+.settings-danger-btn {
+  background: rgba(233,69,96,0.15);
+  border: 1px solid rgba(233,69,96,0.4);
+  color: var(--color-accent-1);
+  font-family: var(--font-display);
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.settings-danger-btn:active {
+  background: rgba(233,69,96,0.3);
+}
+
+.settings-version {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}

@@ -1,0 +1,150 @@
+/* engine/controller.css */
+
+#controller-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;          /* Below system overlay (9999) but above canvas */
+  pointer-events: none;   /* Transparent to touches by default */
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom));
+}
+
+#controller-overlay.hidden {
+  display: none;
+}
+
+#controller-overlay.visible {
+  pointer-events: auto;  /* Activate touch events when controller is shown */
+}
+
+/* ── D-Pad ─────────────────────────────────────────────────────────────── */
+#dpad {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  flex-shrink: 0;
+}
+
+.dpad-btn {
+  position: absolute;
+  background: rgba(255,255,255,0.12);
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.08s ease, transform 0.08s ease;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* D-pad cross shape — each arm is 48×52px */
+.dpad-up {
+  width: 52px; height: 52px;
+  top: 0; left: 54px;
+  border-radius: 8px 8px 4px 4px;
+}
+.dpad-down {
+  width: 52px; height: 52px;
+  bottom: 0; left: 54px;
+  border-radius: 4px 4px 8px 8px;
+}
+.dpad-left {
+  width: 52px; height: 52px;
+  top: 54px; left: 0;
+  border-radius: 8px 4px 4px 8px;
+}
+.dpad-right {
+  width: 52px; height: 52px;
+  top: 54px; right: 0;
+  border-radius: 4px 8px 8px 4px;
+}
+
+.dpad-center {
+  position: absolute;
+  width: 52px; height: 52px;
+  top: 54px; left: 54px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+}
+
+/* D-pad arrow icons (pure CSS) */
+.dpad-up::after    { content: '▲'; }
+.dpad-down::after  { content: '▼'; }
+.dpad-left::after  { content: '◀'; }
+.dpad-right::after { content: '▶'; }
+
+.dpad-btn::after {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  color: rgba(255,255,255,0.7);
+}
+
+/* Active/pressed state */
+.dpad-btn.pressed,
+.dpad-btn:active {
+  background: rgba(255,255,255,0.28);
+  transform: scale(0.92);
+  border-color: rgba(255,255,255,0.5);
+}
+
+/* ── Action Buttons ─────────────────────────────────────────────────────── */
+#action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+}
+
+.action-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.3);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: rgba(255,255,255,0.9);
+  cursor: pointer;
+  touch-action: none;
+  transition: transform 0.08s ease, background 0.08s ease;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+/* A button — coral/pink (primary action) */
+.action-btn--a {
+  background: rgba(233, 69, 96, 0.5);
+  border-color: rgba(233, 69, 96, 0.8);
+  box-shadow: 0 4px 20px rgba(233,69,96,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+/* B button — amber (secondary action) */
+.action-btn--b {
+  background: rgba(245, 166, 35, 0.5);
+  border-color: rgba(245, 166, 35, 0.8);
+  box-shadow: 0 4px 20px rgba(245,166,35,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.action-btn.pressed,
+.action-btn:active {
+  transform: scale(0.88) translateY(2px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+/* ── Global controller opacity ──────────────────────────────────────────── */
+#controller-overlay .dpad-btn,
+#controller-overlay .action-btn {
+  opacity: 0.65;
+}
+
+/* Increase opacity when actively pressed */
+#controller-overlay .dpad-btn.pressed,
+#controller-overlay .action-btn.pressed {
+  opacity: 1;
+}

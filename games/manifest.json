@@ -1,0 +1,11 @@
+[
+  {
+    "id": "memory-match",
+    "title": "Animal Matching Puzzle",
+    "description": "Flip and match pairs of cute animals!",
+    "icon": "ui_icon_cow",
+    "scriptPath": "games/memory_match.js",
+    "ageRange": "2-6",
+    "tags": ["matching", "memory", "animals"]
+  }
+]
