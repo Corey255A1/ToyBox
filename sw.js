@@ -49,6 +49,13 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // For localhost/development, prefer network first to make developer experience smooth
+  const isLocalhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  if (isLocalhost) {
+    event.respondWith(networkFirst(event.request));
+    return;
+  }
+
   // Strategy 1: Cache-Only for precached app shell files
   if (PRECACHE_URLS.includes(url.pathname)) {
     event.respondWith(caches.match(event.request));

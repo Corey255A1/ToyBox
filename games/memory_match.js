@@ -19,14 +19,24 @@ export default {
     this.flippedCards = [];
     this.isLocked     = false;
 
-    // Create a score label
+    // Calculate responsive card size and grid spacing relative to screen aspect ratio
+    const spacingX = (engine.width * 0.8) / 4;
+    const spacingY = (engine.height * 0.65) / 3; // Leaves room for top scoreboard
+    this.gridSpacing = Math.max(70, Math.min(150, Math.min(spacingX, spacingY)));
+    this.targetSize = this.gridSpacing * 0.85;
+
+    // Centered alignment offsets
+    this.gridStartX = engine.width / 2 - (this.gridSpacing * 1.5);
+    this.gridStartY = engine.height / 2 - (this.gridSpacing * 0.5);
+
+    // Create a responsive score label
     this.scoreLabel = engine.spawn({
       id: 'score_label',
       text: '⭐ 0',
-      fontSize: 48,
+      fontSize: Math.max(28, Math.min(48, engine.height * 0.07)),
       color: '#ffd700',
       x: engine.width / 2,
-      y: 60,
+      y: Math.max(30, engine.height * 0.08),
       zIndex: 10,
     });
 
@@ -35,11 +45,14 @@ export default {
       .sort(() => Math.random() - 0.5);
 
     this.cards = pairs.map((animalId, index) => {
+      const col = index % 4;
+      const row = Math.floor(index / 4);
+
       const card = engine.spawn({
         id:      `card_${index}`,
         asset:   'card_back',
-        x:       this._gridX(index, engine.width),
-        y:       this._gridY(index, engine.height),
+        x:       this.gridStartX + col * this.gridSpacing,
+        y:       this.gridStartY + row * this.gridSpacing,
         scale:   1.0,
         onTouch: (self) => {
           if (!this.isLocked && !self._revealed) {
@@ -47,6 +60,16 @@ export default {
           }
         },
       });
+
+      // Dynamically scale card based on its actual texture dimensions
+      if (card.texture && card.texture.width > 0) {
+        const scale = this.targetSize / Math.max(card.texture.width, card.texture.height);
+        card.scale.set(scale);
+        card._baseScale = scale;
+      } else {
+        card._baseScale = 1.0;
+      }
+
       card._animalId  = animalId;
       card._revealed  = false;
       return card;
@@ -62,7 +85,6 @@ export default {
         message: 'Fantastic memory!',
         graphic: 'ui_star',
         onReplay: () => {
-          // Re-init current game
           this.init(engine);
         },
         onExit: () => {
@@ -81,7 +103,7 @@ export default {
         // Match!
         engine.audio.play('match_success');
         
-        // Use engine fx pop animation
+        // Pop animations
         engine.fx.pop(cardA);
         engine.fx.pop(cardB);
 
@@ -97,10 +119,9 @@ export default {
         // No match — flip back
         engine.audio.play('match_fail');
         
-        // Wiggle the cards on fail
+        // Wiggle cards on fail
         engine.fx.wiggle(cardA);
         engine.fx.wiggle(cardB).then(() => {
-          // Flip back after wiggle completes
           engine.fx.flipCard(cardA, 'card_back');
           engine.fx.flipCard(cardB, 'card_back').then(() => {
             cardA._revealed = false;
@@ -109,6 +130,41 @@ export default {
           });
         });
       }
+    }
+  },
+
+  onResize(engine) {
+    // Re-calculate responsive card size and grid spacing on screen size changes
+    const spacingX = (engine.width * 0.8) / 4;
+    const spacingY = (engine.height * 0.65) / 3;
+    this.gridSpacing = Math.max(70, Math.min(150, Math.min(spacingX, spacingY)));
+    this.targetSize = this.gridSpacing * 0.85;
+
+    this.gridStartX = engine.width / 2 - (this.gridSpacing * 1.5);
+    this.gridStartY = engine.height / 2 - (this.gridSpacing * 0.5);
+
+    // Reposition score label
+    if (this.scoreLabel) {
+      this.scoreLabel.x = engine.width / 2;
+      this.scoreLabel.y = Math.max(30, engine.height * 0.08);
+      this.scoreLabel.style.fontSize = Math.max(28, Math.min(48, engine.height * 0.07));
+    }
+
+    // Reposition and scale cards
+    if (this.cards) {
+      this.cards.forEach((card, index) => {
+        const col = index % 4;
+        const row = Math.floor(index / 4);
+
+        card.x = this.gridStartX + col * this.gridSpacing;
+        card.y = this.gridStartY + row * this.gridSpacing;
+
+        if (card.texture && card.texture.width > 0) {
+          const scale = this.targetSize / Math.max(card.texture.width, card.texture.height);
+          card.scale.set(scale);
+          card._baseScale = scale;
+        }
+      });
     }
   },
 
@@ -138,7 +194,6 @@ export default {
     for (const card of this._cards) {
       const t = this._previewTime - card._delay;
       if (t > 0 && t < 0.3) {
-        // Flip-in scale effect
         card.scale = Math.min(0.5, t / 0.3 * 0.5);
       }
     }
@@ -152,11 +207,8 @@ export default {
     }
   },
 
-  // Private grid calculation helpers
   _flipCard(card, animalId, engine) {
     this.isLocked = true;
-    
-    // Play sound and animate custom flip
     engine.audio.play('flip_card');
     
     engine.fx.flipCard(card, `card_${animalId}`).then(() => {
@@ -164,7 +216,6 @@ export default {
       this.flippedCards.push(card);
 
       if (this.flippedCards.length === 2) {
-        // Defer the match check by 600ms
         setTimeout(() => {
           engine.emit('match_check');
         }, 600);
@@ -172,16 +223,6 @@ export default {
         this.isLocked = false;
       }
     });
-  },
-
-  _gridX(index, canvasWidth) {
-    const col = index % 4;
-    return canvasWidth / 2 - 225 + col * 150;
-  },
-
-  _gridY(index, canvasHeight) {
-    const row = Math.floor(index / 4);
-    return canvasHeight / 2 - 80 + row * 150;
   },
 
 };

@@ -111,14 +111,16 @@ export function buildEngineObject() {
     // Micro-animations convenience helpers
     fx: {
       async flipCard(entity, newTexture) {
-        await animateEntity(entity, { scale: 0 }, 0.15, 'easeIn');
+        const targetScaleX = entity.scale.y;
+        await animateEntity(entity, { scaleX: 0 }, 0.15, 'easeIn');
         if (entity.texture) {
           entity.texture = PIXI.Assets.get(newTexture) || entity.texture;
         }
-        await animateEntity(entity, { scale: 1 }, 0.15, 'easeOut');
+        await animateEntity(entity, { scaleX: targetScaleX }, 0.15, 'easeOut');
       },
       async pop(entity) {
-        await animateEntity(entity, { scale: 1.4 }, 0.1, 'easeOut');
+        const base = entity._baseScale ?? entity.scale.x;
+        await animateEntity(entity, { scale: base * 1.4 }, 0.1, 'easeOut');
         await animateEntity(entity, { scale: 0 }, 0.15, 'easeIn');
         destroyEntity(entity);
       },
@@ -263,6 +265,12 @@ function animateEntity(entity, targetProps, duration, easing = 'easeOut') {
       if (key === 'scale') {
         startProps.scale = entity.scale.x;
         deltaProps.scale = targetProps.scale - entity.scale.x;
+      } else if (key === 'scaleX') {
+        startProps.scaleX = entity.scale.x;
+        deltaProps.scaleX = targetProps.scaleX - entity.scale.x;
+      } else if (key === 'scaleY') {
+        startProps.scaleY = entity.scale.y;
+        deltaProps.scaleY = targetProps.scaleY - entity.scale.y;
       } else {
         startProps[key] = entity[key];
         deltaProps[key] = targetProps[key] - entity[key];
@@ -307,6 +315,10 @@ function updateTweens(nowMs) {
         const value = tween.startProps[key] + tween.deltaProps[key] * eased;
         if (key === 'scale') {
           entity.scale.set(value);
+        } else if (key === 'scaleX') {
+          entity.scale.x = value;
+        } else if (key === 'scaleY') {
+          entity.scale.y = value;
         } else {
           entity[key] = value;
         }
@@ -472,14 +484,16 @@ function showLoseState(options) {
 export async function preloadGameAssets(assetConfig) {
   if (!assetConfig || assetConfig.length === 0) return;
 
-  const manifest = assetConfig.map(key => ({
-    alias: key,
-    src:   `/assets/sprites/${key}.png`,
-  }));
+  const promises = assetConfig.map(async (key) => {
+    try {
+      await PIXI.Assets.load({
+        alias: key,
+        src:   `/assets/sprites/${key}.png`,
+      });
+    } catch (err) {
+      console.warn(`[ToyBox/Engine] Failed to load asset "${key}":`, err);
+    }
+  });
 
-  try {
-    await PIXI.Assets.load(manifest);
-  } catch (err) {
-    console.warn('[ToyBox/Engine] Failed to load some texture assets. Dynamic fallback blocks will be spawned.', err);
-  }
+  await Promise.all(promises);
 }

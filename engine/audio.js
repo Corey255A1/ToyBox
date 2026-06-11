@@ -13,16 +13,24 @@ const audioBuffers = new Map(); // assetId → AudioBuffer (decoded audio)
 export function initAudio() {
   if (audioContext) return;
 
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) {
+      console.warn('[ToyBox/Audio] Web Audio API is not supported in this browser.');
+      return;
+    }
+    audioContext = new AudioCtx();
 
-  masterGain = audioContext.createGain();
-  // Restore initial volume level
-  const initialVolume = getSetting('volume') ?? 1.0;
-  masterGain.gain.value = initialVolume;
-  masterGain.connect(audioContext.destination);
+    masterGain = audioContext.createGain();
+    const initialVolume = getSetting('volume') ?? 1.0;
+    masterGain.gain.value = initialVolume;
+    masterGain.connect(audioContext.destination);
 
-  // Resume context on any user gesture (required on iOS/Android)
-  document.addEventListener('pointerdown', resumeContext, { once: false });
+    document.addEventListener('pointerdown', resumeContext, { once: false });
+  } catch (err) {
+    console.warn('[ToyBox/Audio] Failed to initialize AudioContext:', err);
+    audioContext = null;
+  }
 }
 
 function resumeContext() {
@@ -37,6 +45,7 @@ function resumeContext() {
  */
 export async function preloadAudio(assetIds) {
   if (!audioContext) initAudio();
+  if (!audioContext) return;
 
   const promises = assetIds.map(async (id) => {
     if (audioBuffers.has(id)) return; // Already loaded
