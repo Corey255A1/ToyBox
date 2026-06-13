@@ -102,7 +102,10 @@ export default {
 
     currentTouches.forEach((touch) => {
       // Toddler safety check: ignore touches that land on the bottom UI area
-      if (touch.y > engine.height - 160) {
+      const isMobile = engine.width < 600;
+      const barH = isMobile ? 80 : 100;
+      const activeUiMinY = (this.currentTool === 'stamp') ? (engine.height - barH - (isMobile ? 60 : 80) - 15) : (engine.height - barH);
+      if (touch.y > activeUiMinY) {
         return;
       }
 
@@ -453,14 +456,15 @@ export default {
       this.brushGraphics.blendMode = 'normal';
     }
 
-    const fillConfig = { color: this.currentTool === 'eraser' ? 0xffffff : this.currentColorHex };
-
     for (let i = 0; i <= steps; i++) {
       const t = steps === 0 ? 0 : i / steps;
       const cx = x1 + dx * t;
       const cy = y1 + dy * t;
-      this.brushGraphics.circle(cx, cy, this.brushSize / 2).fill(fillConfig);
+      this.brushGraphics.circle(cx, cy, this.brushSize / 2);
     }
+
+    const color = this.currentTool === 'eraser' ? 0xffffff : this.currentColorHex;
+    this.brushGraphics.fill(color);
 
     engine.renderToTexture(this.brushGraphics, this.canvasTexture, false);
   },
