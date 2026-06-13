@@ -19,7 +19,7 @@ export default {
     background:      '#e8f5e9', // Soft mint green background
     interactionMode: 'drag',
     assets: [
-      'slot_glow', 'tray_bg', 'particle_sparkle' // SS-4: Removed 16 shape assets
+      'slot_glow', 'tray_bg', 'particle_sparkle', 'ui_dot_empty', 'ui_dot_filled'
     ],
     audio: ['snap_success', 'snap_fail', 'piece_pickup', 'win_jingle', 'round_complete'],
   },
@@ -31,6 +31,51 @@ export default {
     this.particles = [];
     this.glowPulsate = 0;
     this._progressTimer = 0;
+
+    // Spawn soft decorative background elements to improve visual design
+    this.bgDecorations = [];
+    const decorColors = [0xc8e6c9, 0xa5d6a7, 0xe8f5e9];
+    const decorPositions = [
+      { x: engine.width * 0.15, y: engine.height * 0.2, size: 120 },
+      { x: engine.width * 0.85, y: engine.height * 0.25, size: 160 },
+      { x: engine.width * 0.1,  y: engine.height * 0.75, size: 180 },
+      { x: engine.width * 0.9,  y: engine.height * 0.7, size: 140 }
+    ];
+
+    decorPositions.forEach((pos, idx) => {
+      const entity = engine.spawn({
+        id: `bg_decor_${idx}`,
+        x: pos.x,
+        y: pos.y,
+        zIndex: 0 // Behind gameplay objects
+      });
+      const g = new PIXI.Graphics();
+      const shapeType = ['circle', 'star', 'heart', 'diamond'][idx % 4];
+      const color = decorColors[idx % decorColors.length];
+      drawShape(g, shapeType, color, pos.size / 2, false);
+      entity.addChild(g);
+      entity.alpha = 0.35;
+      this.bgDecorations.push(entity);
+    });
+
+    // Setup round progress dots at top of screen (6 rounds total)
+    this.progressDots = [];
+    const totalRounds = 6;
+    const dotSpacing = 35;
+    const startDotX = engine.width / 2 - (totalRounds - 1) * dotSpacing / 2;
+    const dotsY = 85;
+
+    for (let i = 0; i < totalRounds; i++) {
+      const dot = engine.spawn({
+        id: `dot_${i}`,
+        asset: 'ui_dot_empty',
+        x: startDotX + i * dotSpacing,
+        y: dotsY,
+        scale: 0.8,
+        zIndex: 10
+      });
+      this.progressDots.push(dot);
+    }
 
     // Header Prompt
     this.promptLabel = engine.spawn({
@@ -91,22 +136,77 @@ export default {
   },
 
   onResize(engine) {
+    if (!this.slots || !this.pieces) return;
+
+    const headerHeight = Math.max(90, engine.height * 0.13);
+    const dotsY = headerHeight * 0.72;
+
     if (this.promptLabel) {
       this.promptLabel.x = engine.width / 2;
+      this.promptLabel.y = headerHeight * 0.35;
     }
 
-    const slotSize = Math.max(70, Math.min(150, Math.min(engine.width * 0.15, engine.height * 0.15)));
-    const spacingX = engine.width / ((this.totalPieces || 3) + 1);
+    // Reposition background decorations
+    if (this.bgDecorations) {
+      const decorPositions = [
+        { x: engine.width * 0.15, y: engine.height * 0.2 },
+        { x: engine.width * 0.85, y: engine.height * 0.25 },
+        { x: engine.width * 0.1,  y: engine.height * 0.75 },
+        { x: engine.width * 0.9,  y: engine.height * 0.7 }
+      ];
+      this.bgDecorations.forEach((entity, idx) => {
+        const pos = decorPositions[idx];
+        if (pos) {
+          entity.x = pos.x;
+          entity.y = pos.y;
+        }
+      });
+    }
+
+    // Reposition progress dots
+    if (this.progressDots) {
+      const totalRounds = 6;
+      const dotSpacing = 35;
+      const startDotX = engine.width / 2 - (totalRounds - 1) * dotSpacing / 2;
+      this.progressDots.forEach((dot, i) => {
+        dot.x = startDotX + i * dotSpacing;
+        dot.y = dotsY;
+      });
+    }
+
+    // Define base spacing multipliers
+    const slotSpacingMult = 1.45;
+    const pieceSpacingMult = 1.35;
     
-    const titleH = Math.max(60, engine.height * 0.12);
-    const availableH = engine.height - titleH;
-    const slotsY = titleH + availableH * 0.33;
-    this.trayH = Math.max(80, Math.min(180, availableH * 0.38));
-    const trayY = engine.height - this.trayH / 2 - 10;
+    // We want the tray width to fit within engine.width * 0.92
+    const maxTrayWidth = engine.width * 0.92;
+    const widthFactor = (this.totalPieces - 1) * pieceSpacingMult + 1.6;
+    const maxSlotSizeByWidth = maxTrayWidth / widthFactor;
+    
+    // We also want slots and tray to fit vertically.
+    const bottomMargin = Math.max(20, engine.height * 0.05);
+    const availableHeight = engine.height - headerHeight - bottomMargin;
+    const maxSlotSizeByHeight = availableHeight * 0.22;
+    
+    // Combine constraints and clamp between reasonable min/max values
+    const slotSize = Math.max(65, Math.min(140, Math.min(maxSlotSizeByWidth, maxSlotSizeByHeight)));
+    
+    this.trayH = slotSize * 1.45;
+    const trayY = engine.height - this.trayH / 2 - bottomMargin;
+    
+    const slotsY = headerHeight + (trayY - this.trayH / 2 - headerHeight) / 2;
+
+    const slotSpacing = slotSize * slotSpacingMult;
+    this.slotsStartX = engine.width / 2 - ((this.totalPieces - 1) * slotSpacing) / 2;
+
+    const pieceSpacing = slotSize * pieceSpacingMult;
+    this.piecesStartX = engine.width / 2 - ((this.totalPieces - 1) * pieceSpacing) / 2;
+
+    const trayW = (this.totalPieces - 1) * pieceSpacing + slotSize * 1.6;
 
     if (this.slots) {
       this.slots.forEach((slot, i) => {
-        const x = spacingX * (i + 1);
+        const x = this.slotsStartX + i * slotSpacing;
         const y = slotsY;
         slot.x = x;
         slot.y = y;
@@ -119,8 +219,7 @@ export default {
         if (slot.entity) {
           slot.entity.x = x;
           slot.entity.y = y;
-          slot.entity.width = slotSize;
-          slot.entity.height = slotSize;
+          slot.entity.scale.set(1.0);
           const slotColor = (slot.colorHex & 0xfefefe) >> 1 | 0x404040;
           if (slot.entity._graphics) {
             drawShape(slot.entity._graphics, slot.shapeKey, slot.filled ? slot.colorHex : slotColor, slotSize / 2, !slot.filled);
@@ -129,17 +228,51 @@ export default {
       });
     }
 
-    if (this.traySprite) {
-      this.traySprite.x = engine.width / 2;
-      this.traySprite.y = trayY;
-      this.traySprite.width = engine.width - 20;
-      this.traySprite.height = this.trayH;
+    if (this.trayEntity) {
+      this.trayEntity.x = engine.width / 2;
+      this.trayEntity.y = trayY;
+      
+      const shadowG = this.trayEntity._shadow;
+      const trayG = this.trayEntity._graphics;
+      
+      if (shadowG && trayG) {
+        shadowG.clear();
+        // Drop shadow for the tray box
+        shadowG.roundRect(-trayW / 2, -this.trayH / 2, trayW, this.trayH, 24)
+               .fill({ color: 0x000000, alpha: 0.12 });
+        shadowG.y = 8; // Offset shadow vertically
+        
+        trayG.clear();
+        // Wood-like outer tray frame
+        trayG.roundRect(-trayW / 2, -this.trayH / 2, trayW, this.trayH, 24)
+             .fill(0xd7ccc8); // warm soft wood background
+        trayG.roundRect(-trayW / 2, -this.trayH / 2, trayW, this.trayH, 24)
+             .stroke({ color: 0x8d6e63, width: 6 }); // nice bold wooden outline
+             
+        // Recessed inner bed
+        const innerPadding = Math.max(10, slotSize * 0.12);
+        const innerW = trayW - innerPadding * 2;
+        const innerH = this.trayH - innerPadding * 2;
+        trayG.roundRect(-innerW / 2, -innerH / 2, innerW, innerH, 16)
+             .fill(0xa1887f); // slightly darker recessed tray bed
+        trayG.roundRect(-innerW / 2, -innerH / 2, innerW, innerH, 16)
+             .stroke({ color: 0x6d4c41, width: 2 });
+
+        // Grooves under each piece
+        const relPiecesStartX = - ((this.totalPieces - 1) * pieceSpacing) / 2;
+        for (let j = 0; j < this.totalPieces; j++) {
+          const grooveX = relPiecesStartX + j * pieceSpacing;
+          const grooveSize = slotSize * 0.95;
+          trayG.roundRect(grooveX - grooveSize / 2, -grooveSize / 2, grooveSize, grooveSize, 12)
+               .fill({ color: 0x8d6e63, alpha: 0.25 });
+        }
+      }
     }
 
     if (this.pieces) {
       this.pieces.forEach((piece, i) => {
         piece.size = slotSize;
-        piece.homeX = spacingX * (i + 1);
+        piece.homeX = this.piecesStartX + i * pieceSpacing;
         piece.homeY = trayY;
         if (!piece.draggable) {
           const slot = this.slots ? this.slots.find(s => s.shapeId === piece.shapeId) : null;
@@ -153,10 +286,18 @@ export default {
             piece.entity.y = piece.homeY;
           }
         }
-        piece.entity.width = slotSize * 0.95;
-        piece.entity.height = slotSize * 0.95;
+        if (!this.dragging || this.dragging.piece !== piece) {
+          piece.entity.scale.set(0.95);
+        }
 
-        const pieceG = piece.entity.children[0];
+        const shadowG = piece.entity.children[0];
+        const pieceG = piece.entity.children[1];
+        if (shadowG && this.slots) {
+          const slot = this.slots.find(s => s.shapeId === piece.shapeId);
+          if (slot) {
+            drawShape(shadowG, slot.shapeKey, 0x000000, slotSize / 2, false);
+          }
+        }
         if (pieceG && this.slots) {
           const slot = this.slots.find(s => s.shapeId === piece.shapeId);
           if (slot) {
@@ -174,117 +315,120 @@ export default {
       engine.destroy(s.entity);
       if (s.glow) engine.destroy(s.glow);
     });
-    if (this.traySprite) engine.destroy(this.traySprite);
+    if (this.trayEntity) engine.destroy(this.trayEntity);
 
     this.piecesPlaced = 0;
-    this.totalPieces = this.round === 1 ? 3 : 4;
     
-    // Pick shapes for this round (SS-1 round novelty fix)
-    let roundShapes = [];
-    if (this.round === 1) {
-      roundShapes = ALL_SHAPES.slice(0, 3); // Circle, Square, Triangle
-    } else if (this.round === 2) {
-      roundShapes = ALL_SHAPES.slice(3, 7); // Star, Heart, Diamond, Oval
-    } else {
-      // Round 3: Shuffled mix excluding Round 2 shapes
-      const round2Ids = new Set(ALL_SHAPES.slice(3, 7).map(s => s.id));
-      const eligible  = ALL_SHAPES.filter(s => !round2Ids.has(s.id));
-      roundShapes = eligible.sort(() => Math.random() - 0.5).slice(0, 4);
+    // Starts with 2 shapes for rounds 1-2, 3 shapes for rounds 3-4, 4 shapes for rounds 5-6
+    this.totalPieces = this.round <= 2 ? 2 : (this.round <= 4 ? 3 : 4);
+    
+    // Pick unique random shapes from ALL_SHAPES so it's completely different each play
+    const roundShapes = [...ALL_SHAPES]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, this.totalPieces);
+
+    // Update Header Prompt with round and count details
+    if (this.promptLabel) {
+      this.promptLabel.text = `⭐ Round ${this.round}: Match ${this.totalPieces} Shapes! ⭐`;
     }
 
-    // Positions & Grid
-    const slotSize = Math.max(70, Math.min(150, Math.min(engine.width * 0.15, engine.height * 0.15)));
-    const spacingX = engine.width / (this.totalPieces + 1);
-    
-    const titleH = Math.max(60, engine.height * 0.12);
-    const availableH = engine.height - titleH;
-    const slotsY = titleH + availableH * 0.33;
+    // Update progress indicator dots
+    this._updateProgressDots(engine);
 
-    // 1. Spawn Silhouette slots
-    this.slots = roundShapes.map((shape, i) => {
-      const x = spacingX * (i + 1);
-      const y = slotsY;
-
+    // 1. Spawn Silhouette slots (without positions, will be placed in onResize)
+    this.slots = roundShapes.map((shape) => {
       // Glow behind slot
       const glow = engine.spawn({
         id: `glow_${shape.id}`,
         asset: 'slot_glow',
-        x, y,
-        scale: (slotSize * 1.6) / 256,
         zIndex: 1
       });
       glow.visible = false;
       glow.tint = parseInt(shape.color.replace('#', ''), 16);
 
-      // Slot silhouette outline (SS-4: draw with PIXI.Graphics directly)
+      // Slot silhouette outline
       const entity = engine.spawn({
         id: `slot_${shape.id}`,
-        x, y,
         zIndex: 2
       });
       const slotG = new PIXI.Graphics();
-      // SS-3: Darkened variant of shape color instead of dark grey
-      const slotColor = (parseInt(shape.color.replace('#', ''), 16) & 0xfefefe) >> 1 | 0x404040;
-      drawShape(slotG, shape.key, slotColor, slotSize / 2, true);
       entity.addChild(slotG);
-
-      entity.width = slotSize;
-      entity.height = slotSize;
       entity._graphics = slotG;
 
       return {
         entity,
         shapeId: shape.id,
         shapeKey: shape.key,
-        x, y,
+        x: 0,
+        y: 0,
         filled: false,
         glow,
         colorHex: parseInt(shape.color.replace('#', ''), 16),
-        size: slotSize
+        size: 80
       };
     });
 
-    // 2. Spawn Tray background at bottom
-    this.trayH = Math.max(80, Math.min(180, availableH * 0.38));
-    const trayY = engine.height - this.trayH / 2 - 10;
-    this.traySprite = engine.spawn({
-      id: 'tray_bg',
-      asset: 'tray_bg',
-      x: engine.width / 2,
-      y: trayY,
+    // 2. Spawn Tray container at bottom
+    this.trayEntity = engine.spawn({
+      id: 'tray_container',
       zIndex: 1
     });
-    this.traySprite.width = engine.width - 20;
-    this.traySprite.height = this.trayH;
-    this.traySprite.tint = 0xd7ccc8; // light wood/brown tray
+    const shadowG = new PIXI.Graphics();
+    const trayG = new PIXI.Graphics();
+    this.trayEntity.addChild(shadowG);
+    this.trayEntity.addChild(trayG);
+    this.trayEntity._shadow = shadowG;
+    this.trayEntity._graphics = trayG;
 
-    // 3. Spawn draggable pieces (shuffled horizontally in the tray, SS-4: draw directly)
+    // 3. Spawn draggable pieces (shuffled horizontally in the tray, will be placed in onResize)
     const shuffledShapes = [...roundShapes].sort(() => Math.random() - 0.5);
 
-    this.pieces = shuffledShapes.map((shape, i) => {
-      const x = spacingX * (i + 1);
-      const y = trayY;
-
+    this.pieces = shuffledShapes.map((shape) => {
       const entity = engine.spawn({
         id: `piece_${shape.id}`,
-        x, y,
         zIndex: 4
       });
-      const pieceG = new PIXI.Graphics();
-      drawShape(pieceG, shape.key, parseInt(shape.color.replace('#', ''), 16), slotSize / 2, false);
-      entity.addChild(pieceG);
 
-      entity.width = slotSize * 0.95;
-      entity.height = slotSize * 0.95;
+      // Add a soft drop shadow graphics child (drawn at bottom index 0)
+      const shadowG = new PIXI.Graphics();
+      shadowG.alpha = 0.2;
+      shadowG.visible = false;
+      entity.addChild(shadowG);
+
+      // Add actual colored piece graphics (drawn at index 1)
+      const pieceG = new PIXI.Graphics();
+      entity.addChild(pieceG);
 
       return {
         entity,
         shapeId: shape.id,
-        homeX: x,
-        homeY: y,
+        homeX: 0,
+        homeY: 0,
         draggable: true,
-        size: slotSize
+        size: 80
       };
+    });
+
+    // Run positioning and initial draw
+    this.onResize(engine);
+  },
+
+  _updateProgressDots(engine) {
+    if (!this.progressDots) return;
+    this.progressDots.forEach((dot, i) => {
+      const isCompleted = this.round > (i + 1);
+      const targetAsset = isCompleted ? 'ui_dot_filled' : 'ui_dot_empty';
+      if (dot.texture) {
+        dot.texture = PIXI.Assets.get(targetAsset) || dot.texture;
+      }
+      
+      if (this.round === (i + 1)) {
+        dot.scale.set(1.1);
+        dot.tint = 0xFFC107; // gold active round tint
+      } else {
+        dot.scale.set(0.8);
+        dot.tint = isCompleted ? 0xffffff : 0xbbbbbb;
+      }
     });
   },
 
@@ -292,12 +436,12 @@ export default {
     if (this.dragging) return;
 
     const { x, y } = pointer;
-    const dragRadius = 70;
 
     // Find clicked piece
     for (const piece of this.pieces) {
       if (!piece.draggable) continue;
 
+      const dragRadius = piece.size * 0.75;
       const dx = piece.entity.x - x;
       const dy = piece.entity.y - y;
       if (dx * dx + dy * dy < dragRadius * dragRadius) {
@@ -310,6 +454,14 @@ export default {
 
         engine.audio.play('piece_pickup');
         piece.entity.zIndex = 10; // bring to top
+        
+        // Show and offset drop shadow child
+        const shadow = piece.entity.children[0];
+        if (shadow) {
+          shadow.visible = true;
+          engine.animate(shadow, { x: 8, y: 12 }, 0.1, 'easeOut');
+        }
+
         engine.animate(piece.entity, { scale: 1.18 }, 0.1, 'easeOut');
         break;
       }
@@ -384,6 +536,14 @@ export default {
       }
     }
 
+    // Reset shadow offset and hide it
+    const shadow = piece.entity.children[0];
+    if (shadow) {
+      engine.animate(shadow, { x: 0, y: 0 }, 0.15, 'easeOut').then(() => {
+        shadow.visible = false;
+      });
+    }
+
     if (correctSlot) {
       this._snapPiece(piece, correctSlot, engine);
     } else {
@@ -417,6 +577,12 @@ export default {
     slot.filled = true;
     slot.glow.visible = false;
     piece.entity.zIndex = 3;
+
+    // Hide shadow on snap
+    const shadow = piece.entity.children[0];
+    if (shadow) {
+      shadow.visible = false;
+    }
 
     // Lock position to slot center (SS-2: snap overshoot click anim)
     engine.animate(piece.entity, { x: slot.x, y: slot.y, scale: 1.1 }, 0.15, 'easeOut')
@@ -461,20 +627,31 @@ export default {
   },
 
   _progressRound(engine) {
+    // Fill the round progress star/dot with a beautiful bounce pop
+    if (this.progressDots) {
+      const currentDot = this.progressDots[this.round - 1];
+      if (currentDot) {
+        currentDot.texture = PIXI.Assets.get('ui_dot_filled') || currentDot.texture;
+        currentDot.tint = 0xffffff;
+        engine.animate(currentDot, { scale: 1.4 }, 0.15, 'easeOut')
+          .then(() => engine.animate(currentDot, { scale: 0.8 }, 0.15, 'bounce'));
+      }
+    }
     this._progressTimer = 1.0; // SS-5
   },
 
   _doProgressRound(engine) {
     this.round++;
-    if (this.round <= 3) {
+    if (this.round <= 6) { // 6 rounds total
       engine.audio.play('round_complete');
       this._startRound(engine);
     } else {
       // Finished all rounds
       engine.audio.play('win_jingle');
       engine.system.triggerWinState({
-        title: 'SHAPE SHAPE CHAMPION!',
-        message: `Incredible! You completed all shape matching puzzles!`,
+        title: 'SHAPE CHAMPION! 🏆',
+        message: `Outstanding! You solved all 6 shape matching puzzle rounds!`,
+        graphic: 'ui_star',
         onReplay: () => this.init(engine),
         onExit: () => engine.system.exit(),
       });
@@ -557,12 +734,14 @@ function drawShape(g, type, colorHex, size, isSlot) {
   g.clear();
   if (type === 'circle') {
     if (isSlot) {
+      g.circle(0, 0, size).fill({ color: colorHex, alpha: 0.15 });
       g.circle(0, 0, size).stroke({ color: colorHex, width: 6 });
     } else {
       g.circle(0, 0, size).fill(colorHex);
     }
   } else if (type === 'square') {
     if (isSlot) {
+      g.rect(-size, -size, size * 2, size * 2).fill({ color: colorHex, alpha: 0.15 });
       g.rect(-size, -size, size * 2, size * 2).stroke({ color: colorHex, width: 6 });
     } else {
       g.rect(-size, -size, size * 2, size * 2).fill(colorHex);
@@ -570,6 +749,7 @@ function drawShape(g, type, colorHex, size, isSlot) {
   } else if (type === 'triangle') {
     const pts = [0, -size, size, size, -size, size];
     if (isSlot) {
+      g.poly(pts).fill({ color: colorHex, alpha: 0.15 });
       g.poly(pts).stroke({ color: colorHex, width: 6 });
     } else {
       g.poly(pts).fill(colorHex);
@@ -585,6 +765,7 @@ function drawShape(g, type, colorHex, size, isSlot) {
         pts.push(Math.cos(rot) * size * 0.5, Math.sin(rot) * size * 0.5);
         rot += step;
       }
+      g.poly(pts).fill({ color: colorHex, alpha: 0.15 });
       g.poly(pts).stroke({ color: colorHex, width: 6 });
     } else {
       drawStar(g, 0, 0, 5, size * 1.1, size * 0.5, colorHex);
@@ -597,6 +778,7 @@ function drawShape(g, type, colorHex, size, isSlot) {
       pts.push(x, y);
     }
     if (isSlot) {
+      g.poly(pts).fill({ color: colorHex, alpha: 0.15 });
       g.poly(pts).stroke({ color: colorHex, width: 6 });
     } else {
       g.poly(pts).fill(colorHex);
@@ -604,12 +786,14 @@ function drawShape(g, type, colorHex, size, isSlot) {
   } else if (type === 'diamond') {
     const pts = [0, -size * 1.2, size, 0, 0, size * 1.2, -size, 0];
     if (isSlot) {
+      g.poly(pts).fill({ color: colorHex, alpha: 0.15 });
       g.poly(pts).stroke({ color: colorHex, width: 6 });
     } else {
       g.poly(pts).fill(colorHex);
     }
   } else if (type === 'oval') {
     if (isSlot) {
+      g.ellipse(0, 0, size * 1.3, size * 0.8).fill({ color: colorHex, alpha: 0.15 });
       g.ellipse(0, 0, size * 1.3, size * 0.8).stroke({ color: colorHex, width: 6 });
     } else {
       g.ellipse(0, 0, size * 1.3, size * 0.8).fill(colorHex);
@@ -617,8 +801,10 @@ function drawShape(g, type, colorHex, size, isSlot) {
   } else if (type === 'cross') {
     const w = size * 0.4;
     const h = size * 1.2;
+    const pts = [-w, -h, w, -h, w, -w, h, -w, h, w, w, w, w, h, -w, h, -w, w, -h, w, -h, -w, -w, -w];
     if (isSlot) {
-      g.poly([-w, -h, w, -h, w, -w, h, -w, h, w, w, w, w, h, -w, h, -w, w, -h, w, -h, -w, -w, -w]).stroke({ color: colorHex, width: 6 });
+      g.poly(pts).fill({ color: colorHex, alpha: 0.15 });
+      g.poly(pts).stroke({ color: colorHex, width: 6 });
     } else {
       g.rect(-w, -h, w * 2, h * 2).fill(colorHex);
       g.rect(-h, -w, h * 2, w * 2).fill(colorHex);
