@@ -1,135 +1,135 @@
 // games/digital_coloring.js
 // ToyBox Mini-Game: Digital Coloring
-// Target age: 2–5 years | Interaction: Drag | Duration: ~3 min
+// Target age: 2–5 years | Interaction: Drag & Tap (Multi-touch) | Duration: Open-ended
 
-const SCENE_KEYS = ['scene_dog', 'scene_cat', 'scene_elephant', 'scene_fish', 'scene_flower', 'scene_rainbow'];
-const SCENE_NAMES = {
-  scene_dog: 'Dog! 🐶',
-  scene_cat: 'Cat! 🐱',
-  scene_elephant: 'Elephant! 🐘',
-  scene_fish: 'Fish! 🐟',
-  scene_flower: 'Flower! 🌸',
-  scene_rainbow: 'Rainbow! 🌈'
-};
-const SCENE_SOUNDS = {
-  scene_dog: 'animal_sound_dog',
-  scene_cat: 'animal_sound_cat',
-  scene_elephant: 'animal_sound_elephant',
-  scene_fish: 'reveal_whoosh',
-  scene_flower: 'reveal_whoosh',
-  scene_rainbow: 'reveal_whoosh'
-};
+const COLORS = [
+  { hex: 0xff3b30, name: 'Red' },
+  { hex: 0xff9500, name: 'Orange' },
+  { hex: 0xffcc00, name: 'Yellow' },
+  { hex: 0x34c759, name: 'Green' },
+  { hex: 0x007aff, name: 'Blue' },
+  { hex: 0xaf52de, name: 'Purple' },
+  { hex: 0xff2d55, name: 'Pink' },
+  { hex: 0x1c1c1e, name: 'Black' }
+];
+
+const STAMP_ASSETS = [
+  { id: 'cat', asset: 'animal_cat', label: '🐱' },
+  { id: 'dog', asset: 'animal_dog', label: '🐶' },
+  { id: 'cow', asset: 'animal_cow', label: '🐄' },
+  { id: 'pig', asset: 'animal_pig', label: '🐷' },
+  { id: 'star', asset: 'ui_star', label: '⭐' }
+];
 
 export default {
 
   config: {
-    background:      '#fef9e7',
-    interactionMode: 'drag',
+    background:      '#ffffff', // Clean white background canvas
+    interactionMode: 'drag',    // Drag to draw, also handles tapping
     assets: [
-      ...SCENE_KEYS, 'scene_fog', 'particle_sparkle',
-      'progress_bar_bg', 'progress_bar_fill'
+      'animal_cat', 'animal_dog', 'animal_cow', 'animal_pig', 'ui_star',
+      'particle_sparkle'
     ],
-    audio: ['brush_stroke', 'reveal_whoosh', 'animal_sound_dog', 'animal_sound_cat', 'animal_sound_elephant', 'win_jingle'],
+    audio: ['brush_stroke', 'reveal_whoosh', 'win_jingle'],
   },
 
   init(engine) {
-    this.sceneIndex = 0;
-    this.sceneQueue = [...SCENE_KEYS].sort(() => Math.random() - 0.5);
-    this.autoCompleted = false;
-    this._completing = false;
-    this.soundThrottle = 0;
-    this.sparkleTimer = 0;
-    this._subjectTimer = 0;
-    this._nextSceneTimer = 0;
+    this.currentColorHex = COLORS[0].hex; // Default Red
+    this.currentTool = 'brush';           // 'brush' | 'eraser' | 'stamp'
+    this.selectedStamp = STAMP_ASSETS[0];  // Default Cat stamp
     
-    this._loadScene(engine);
+    this.brushSize = Math.max(16, engine.width * 0.04);
+    this.lastPositions = {}; // Touch ID -> { x, y }
+    this.sparkles = [];
 
-    // Prompt Header
+    this.isPreviewMode = (engine.app == null) || (engine.width < 250);
+
+    // 1. Create drawing canvas texture
+    if (!this.isPreviewMode) {
+      this.canvasTexture = PIXI.RenderTexture.create({
+        width: engine.width,
+        height: engine.height
+      });
+      this.canvasSprite = new PIXI.Sprite(this.canvasTexture);
+      this.canvasSprite.zIndex = 1;
+      engine.app.stage.addChild(this.canvasSprite);
+
+      this.brushGraphics = new PIXI.Graphics();
+    }
+
+    // 2. Create Header Prompt
     this.promptLabel = engine.spawn({
       id: 'prompt_label',
-      text: '🎨 Scratch to paint the picture!',
-      fontSize: 28,
+      text: '🎨 Color & Draw anything! 🎨',
+      fontSize: 26,
       color: '#4a3728',
       x: engine.width / 2,
       y: 40,
       zIndex: 10
     });
-
-    // Progress bar BG
-    this.progBg = engine.spawn({
-      id: 'prog_bg',
-      asset: 'progress_bar_bg',
-      x: engine.width / 2,
-      y: engine.height - 50,
-      zIndex: 10
-    });
-
-    // Progress bar Fill
-    this.progFill = engine.spawn({
-      id: 'prog_fill',
-      asset: 'progress_bar_fill',
-      x: engine.width / 2 - 150, // Start aligned left inside BG
-      y: engine.height - 50,
-      zIndex: 11
-    });
-    // Set anchor to left edge so scaling width stretches to the right
-    if (this.progFill.anchor) {
-      this.progFill.anchor.set(0, 0.5);
+    if (this.promptLabel.style) {
+      this.promptLabel.style.stroke = '#ffffff';
+      this.promptLabel.style.strokeThickness = 4;
     }
-    this.progFill.scale.x = 0;
+
+    // 3. Build UI controls (circular color swatches + tool buttons)
+    this._createUI(engine);
   },
 
   update(engine, deltaTime) {
     if (this.isPreviewMode) return;
 
-    if (this.soundThrottle > 0) {
-      this.soundThrottle -= deltaTime;
-    }
+    // 1. Handle Multi-touch drawing
+    const currentTouches = engine.input.touches || [];
+    const activeIds = new Set();
 
-    // Update progress bar
-    if (this.progFill) {
-      const targetScale = Math.min(1, this.revealPercent / 0.3);
-      this.progFill.scale.x = targetScale;
-    }
+    currentTouches.forEach((touch) => {
+      // Toddler safety check: ignore touches that land on the bottom UI area
+      if (touch.y > engine.height - 160) {
+        return;
+      }
 
-    // Spawn random sparkles during auto-complete celebration
-    if (this.autoCompleted && this.sparkleTimer > 0) {
-      this.sparkleTimer -= deltaTime;
-      if (Math.random() < 0.25) {
-        this._spawnSparkle(engine, 100 + Math.random() * (engine.width - 200), 100 + Math.random() * (engine.height - 200));
+      activeIds.add(touch.id);
+      const prev = this.lastPositions[touch.id];
+      
+      if (this.currentTool === 'stamp') {
+        // Stamp tool places a stamp once on touch start
+        if (!prev) {
+          this._placeStamp(touch.x, touch.y, engine);
+        }
+      } else {
+        // Brush/Eraser draws continuous lines
+        if (prev) {
+          this._drawStroke(prev.x, prev.y, touch.x, touch.y, engine);
+        } else {
+          this._drawStroke(touch.x, touch.y, touch.x, touch.y, engine);
+        }
+      }
+      this.lastPositions[touch.id] = { x: touch.x, y: touch.y };
+    });
+
+    // Remove touches that are no longer active
+    for (const id in this.lastPositions) {
+      if (!activeIds.has(Number(id))) {
+        delete this.lastPositions[id];
       }
     }
 
-    // Delta-time timers
-    if (this._subjectTimer > 0) {
-      this._subjectTimer -= deltaTime;
-      if (this._subjectTimer <= 0) {
-        this._announceSubject(engine);
+    // 2. Move sparkles
+    this.sparkles = this.sparkles.filter((p) => {
+      p.x += p._vx * deltaTime;
+      p.y += p._vy * deltaTime;
+      p.alpha -= 2.0 * deltaTime;
+      if (p.alpha <= 0) {
+        engine.destroy(p);
+        return false;
       }
-    }
-
-    if (this._nextSceneTimer > 0) {
-      this._nextSceneTimer -= deltaTime;
-      if (this._nextSceneTimer <= 0) {
-        this._nextScene(engine);
-      }
-    }
+      return true;
+    });
   },
 
   onEvent(engine, eventName, payload) {
-    if (this.isPreviewMode || this.autoCompleted) return;
-
-    if (eventName === 'touch_down' || eventName === 'drag_start') {
-      this._currentBrushR = this.brushSize;
-      const { x, y } = payload;
-      this._paintAt(x, y, engine);
-    } else if (eventName === 'touch_move') {
-      this._currentBrushR = Math.min(this.brushSize * 2.0, (this._currentBrushR || this.brushSize) * 1.08);
-      const { x, y } = payload;
-      this._paintAt(x, y, engine);
-    } else if (eventName === 'drag_end') {
-      this._currentBrushR = this.brushSize;
-    }
+    // We handle custom taps for stamps or clear canvas
   },
 
   onResize(engine) {
@@ -137,295 +137,371 @@ export default {
       this.promptLabel.x = engine.width / 2;
     }
 
-    if (this.progBg) {
-      this.progBg.x = engine.width / 2;
-      this.progBg.y = engine.height - 50;
-    }
-
-    if (this.progFill) {
-      this.progFill.x = engine.width / 2 - 150;
-      this.progFill.y = engine.height - 50;
-    }
-
-    const scale = Math.max(engine.width / 1024, engine.height / 768);
-    if (this.bgSprite) {
-      this.bgSprite.x = engine.width / 2;
-      this.bgSprite.y = engine.height / 2;
-      this.bgSprite.scale.set(scale);
-    }
-
-    if (this.fogSprite) {
-      this.fogSprite.x = engine.width / 2;
-      this.fogSprite.y = engine.height / 2;
-      this.fogSprite.scale.set(scale);
-    }
-
-    if (this.nameLabel) {
-      this.nameLabel.x = engine.width / 2;
-      this.nameLabel.y = engine.height / 2;
-    }
-
-    if (!this.isPreviewMode && this.maskTexture) {
-      this.maskTexture.resize(engine.width, engine.height);
-
-      const clearG = new PIXI.Graphics();
-      clearG.rect(0, 0, engine.width, engine.height).fill(0xffffff);
-      engine.renderToTexture(clearG, this.maskTexture, true);
-      clearG.destroy();
-
-      this.brushSize = engine.width * 0.09;
-
-      if (this.brushGraphics && this.grid) {
-        this.brushGraphics.clear();
-        const cellW = engine.width / (this.gridCols || 10);
-        const cellH = engine.height / (this.gridRows || 8);
-        for (let c = 0; c < (this.gridCols || 10); c++) {
-          for (let r = 0; r < (this.gridRows || 8); r++) {
-            const idx = r * (this.gridCols || 10) + c;
-            if (this.grid[idx]) {
-              const cx = c * cellW + cellW / 2;
-              const cy = r * cellH + cellH / 2;
-              this.brushGraphics.circle(cx, cy, this.brushSize);
-            }
-          }
-        }
-        this.brushGraphics.fill(0xffffff);
-        engine.renderToTexture(this.brushGraphics, this.maskTexture, false);
-      }
-    }
-  },
-
-  _loadScene(engine) {
-    this.autoCompleted = false;
-    this._completing = false;
-    this.cellsRevealed = 0;
-    this.revealPercent = 0;
-    this._subjectTimer = 0;
-    this._nextSceneTimer = 0;
-
-    const currentKey = this.sceneQueue[this.sceneIndex];
-
-    // Spawn colorful revealed layer (zIndex 1)
-    this.bgSprite = engine.spawn({
-      id: 'bg_sprite',
-      asset: currentKey,
-      x: engine.width / 2,
-      y: engine.height / 2,
-      zIndex: 1
-    });
-    // Scale to fill screen fully (both bgSprite and fogSprite)
-    const scale = Math.max(engine.width / 1024, engine.height / 768);
-    this.bgSprite.scale.set(scale);
-
-    // Spawn background fog layer (gray/monochrome scene on top, zIndex 2)
-    this.fogSprite = engine.spawn({
-      id: 'fog_sprite',
-      asset: 'scene_fog',
-      x: engine.width / 2,
-      y: engine.height / 2,
-      zIndex: 2
-    });
-    this.fogSprite.tint = 0x999999; // grey fog
-    this.fogSprite.scale.set(scale);
-
-    // Setup reveal grid for tracking progress
-    this.gridCols = 10;
-    this.gridRows = 8;
-    this.grid = new Array(this.gridCols * this.gridRows).fill(false);
-    this.totalGridCells = this.gridCols * this.gridRows;
-
-    // Check if we are running in full engine vs preview mode
-    this.isPreviewMode = !engine.renderToTexture;
-    
-    if (!this.isPreviewMode) {
-      // 1. Create WebGL render texture
-      this.maskTexture = PIXI.RenderTexture.create({
-        width: engine.width,
-        height: engine.height
+    // Backup, resize, and restore canvas drawing texture to prevent loss of artwork
+    if (!this.isPreviewMode && this.canvasTexture) {
+      const backupTexture = PIXI.RenderTexture.create({
+        width: this.canvasTexture.width,
+        height: this.canvasTexture.height
       });
+      
+      const backupSprite = new PIXI.Sprite(this.canvasTexture);
+      engine.renderToTexture(backupSprite, backupTexture, true);
+      backupSprite.destroy();
 
-      // 2. Create mask sprite (do NOT add to stage, just set as mask)
-      this.maskSprite = new PIXI.Sprite(this.maskTexture);
-      this.fogSprite.mask = this.maskSprite;
+      this.canvasTexture.resize(engine.width, engine.height);
 
-      // 3. Clear mask with solid white (fog opaque everywhere)
-      const clearG = new PIXI.Graphics();
-      clearG.rect(0, 0, engine.width, engine.height).fill(0xffffff);
-      engine.renderToTexture(clearG, this.maskTexture, true);
-      clearG.destroy();
-
-      // 4. Brush graphics object with erase blendMode
-      this.brushGraphics = new PIXI.Graphics();
-      this.brushGraphics.blendMode = 'erase';
-      this.brushSize = engine.width * 0.09;
-      this._currentBrushR = this.brushSize;
-    } else {
-      // In preview mode: simple overlay fade simulation
-      this.bgSprite.alpha = 0;
+      const restoreSprite = new PIXI.Sprite(backupTexture);
+      engine.renderToTexture(restoreSprite, this.canvasTexture, true);
+      restoreSprite.destroy();
+      backupTexture.destroy();
     }
+
+    this.brushSize = Math.max(16, engine.width * 0.04);
+
+    this._repositionUI(engine);
   },
 
-  _paintAt(x, y, engine) {
-    if (this.isPreviewMode || this.autoCompleted) return;
+  _createUI(engine) {
+    this.colorButtons = [];
+    this.stampOptionButtons = [];
 
-    // 1. Render eraser circles onto mask texture
-    this.brushGraphics.clear();
-    const offsets = [{ dx: 0, dy: 0 }, { dx: -14, dy: 8 }, { dx: 14, dy: 8 }];
-    offsets.forEach(o => {
-      this.brushGraphics.circle(x + o.dx, y + o.dy, this._currentBrushR);
+    // Create a background panel for the bottom toolbar
+    this.toolbarBg = engine.spawn({
+      id: 'toolbar_bg',
+      zIndex: 5
     });
-    this.brushGraphics.fill(0xffffff);
-    engine.renderToTexture(this.brushGraphics, this.maskTexture, false);
+    this.toolbarGraphics = new PIXI.Graphics();
+    this.toolbarBg.addChild(this.toolbarGraphics);
 
-    // 2. Play brush sound (throttled)
-    if (this.soundThrottle <= 0) {
-      engine.audio.play('brush_stroke', { volume: 0.4 });
-      this.soundThrottle = 0.18;
-    }
+    // Create main tool buttons (Brush, Eraser, Stamp, Clear)
+    this.btnBrush = engine.spawn({
+      id: 'btn_tool_brush',
+      zIndex: 6,
+      onTouch: () => this._selectTool('brush', engine)
+    });
+    this.btnBrushGraphics = new PIXI.Graphics();
+    this.btnBrush.addChild(this.btnBrushGraphics);
 
-    // 3. Compute grid reveal
-    const cellW = engine.width / this.gridCols;
-    const cellH = engine.height / this.gridRows;
-    const brushR2 = this._currentBrushR * this._currentBrushR;
+    this.btnEraser = engine.spawn({
+      id: 'btn_tool_eraser',
+      zIndex: 6,
+      onTouch: () => this._selectTool('eraser', engine)
+    });
+    this.btnEraserGraphics = new PIXI.Graphics();
+    this.btnEraser.addChild(this.btnEraserGraphics);
 
-    for (let c = 0; c < this.gridCols; c++) {
-      for (let r = 0; r < this.gridRows; r++) {
-        const idx = r * this.gridCols + c;
-        if (this.grid[idx]) continue;
+    this.btnStamp = engine.spawn({
+      id: 'btn_tool_stamp',
+      zIndex: 6,
+      onTouch: () => this._selectTool('stamp', engine)
+    });
+    this.btnStampGraphics = new PIXI.Graphics();
+    this.btnStamp.addChild(this.btnStampGraphics);
 
-        const cx = c * cellW + cellW / 2;
-        const cy = r * cellH + cellH / 2;
+    this.btnClear = engine.spawn({
+      id: 'btn_tool_clear',
+      zIndex: 6,
+      onTouch: () => this._clearCanvas(engine)
+    });
+    this.btnClearGraphics = new PIXI.Graphics();
+    this.btnClear.addChild(this.btnClearGraphics);
 
-        const dx = cx - x;
-        const dy = cy - y;
-        if (dx * dx + dy * dy < brushR2) {
-          this.grid[idx] = true;
-          this.cellsRevealed++;
-        }
-      }
-    }
+    // Create Color Swatches
+    COLORS.forEach((color, i) => {
+      const btn = engine.spawn({
+        id: `btn_color_${color.name.toLowerCase()}`,
+        zIndex: 6,
+        onTouch: () => this._selectColor(color.hex, engine)
+      });
+      const swatchG = new PIXI.Graphics();
+      btn.addChild(swatchG);
+      btn._swatchG = swatchG;
+      btn._colorHex = color.hex;
+      this.colorButtons.push(btn);
+    });
 
-    this.revealPercent = this.cellsRevealed / this.totalGridCells;
+    // Create Secondary Stamp popup panel (initially hidden)
+    this.stampPopupBg = engine.spawn({
+      id: 'stamp_popup_bg',
+      zIndex: 8
+    });
+    this.stampPopupGraphics = new PIXI.Graphics();
+    this.stampPopupBg.addChild(this.stampPopupGraphics);
+    this.stampPopupBg.visible = false;
 
-    // Check threshold (30%)
-    if (this.revealPercent >= 0.3) {
-      this._triggerAutoComplete(engine);
+    STAMP_ASSETS.forEach((stamp, i) => {
+      const btn = engine.spawn({
+        id: `btn_stamp_opt_${stamp.id}`,
+        zIndex: 9,
+        onTouch: () => this._selectStamp(stamp, engine)
+      });
+      const optG = new PIXI.Graphics();
+      btn.addChild(optG);
+      
+      const textLabel = new PIXI.Text({
+        text: stamp.label,
+        style: new PIXI.TextStyle({ fontSize: 28 })
+      });
+      textLabel.anchor.set(0.5);
+      btn.addChild(textLabel);
+
+      btn._optG = optG;
+      btn._stampInfo = stamp;
+      this.stampOptionButtons.push(btn);
+    });
+
+    // Position everything initially
+    this._repositionUI(engine);
+    this._updateUIHighlighting();
+  },
+
+  _repositionUI(engine) {
+    const isMobile = engine.width < 600;
+    const barH = isMobile ? 80 : 100;
+    const barY = engine.height - barH;
+
+    // Draw main toolbar background
+    this.toolbarGraphics.clear();
+    this.toolbarGraphics.rect(0, 0, engine.width, barH).fill(0xf4ebe1).stroke({ color: 0xdfd5c6, width: 4 });
+    this.toolbarBg.x = 0;
+    this.toolbarBg.y = barY;
+
+    // Position tool buttons
+    const btnSize = isMobile ? 48 : 64;
+    const margin = isMobile ? 12 : 24;
+
+    this.btnBrush.x = margin + btnSize / 2;
+    this.btnBrush.y = barY + barH / 2;
+    this.btnBrushGraphics.clear()
+      .roundRect(-btnSize/2, -btnSize/2, btnSize, btnSize, 12)
+      .fill(0xffffff)
+      .stroke({ color: 0x4a3728, width: 3 });
+    // draw a simple brush stroke preview inside
+    this.btnBrushGraphics.circle(0, 0, btnSize * 0.2).fill(0xe94560);
+
+    this.btnEraser.x = margin + btnSize * 1.5 + 8;
+    this.btnEraser.y = barY + barH / 2;
+    this.btnEraserGraphics.clear()
+      .roundRect(-btnSize/2, -btnSize/2, btnSize, btnSize, 12)
+      .fill(0xffffff)
+      .stroke({ color: 0x4a3728, width: 3 });
+    // draw a pink rectangle inside for eraser representation
+    this.btnEraserGraphics.roundRect(-btnSize * 0.25, -btnSize * 0.15, btnSize * 0.5, btnSize * 0.3, 4).fill(0xff2d55);
+
+    this.btnStamp.x = margin + btnSize * 2.5 + 16;
+    this.btnStamp.y = barY + barH / 2;
+    this.btnStampGraphics.clear()
+      .roundRect(-btnSize/2, -btnSize/2, btnSize, btnSize, 12)
+      .fill(0xffffff)
+      .stroke({ color: 0x4a3728, width: 3 });
+    // draw a little star shape inside
+    this.btnStampGraphics.circle(0, 0, btnSize * 0.22).fill(0xffcc00);
+
+    this.btnClear.x = engine.width - margin - btnSize / 2;
+    this.btnClear.y = barY + barH / 2;
+    this.btnClearGraphics.clear()
+      .roundRect(-btnSize/2, -btnSize/2, btnSize, btnSize, 12)
+      .fill(0xffe5e5)
+      .stroke({ color: 0xd32f2f, width: 3 });
+    // draw a trash icon (red cross)
+    this.btnClearGraphics.rect(-2, -12, 4, 24).fill(0xd32f2f);
+    this.btnClearGraphics.rect(-12, -2, 24, 4).fill(0xd32f2f);
+    this.btnClearGraphics.rotation = Math.PI / 4;
+
+    // Position color swatches
+    const leftBound = this.btnStamp.x + btnSize / 2 + (isMobile ? 12 : 24);
+    const rightBound = this.btnClear.x - btnSize / 2 - (isMobile ? 12 : 24);
+    const swatchAreaW = rightBound - leftBound;
+    const swatchSpacing = swatchAreaW / (COLORS.length - 1);
+    const swatchR = isMobile ? 14 : 22;
+
+    this.colorButtons.forEach((btn, i) => {
+      btn.x = leftBound + i * swatchSpacing;
+      btn.y = barY + barH / 2;
+      
+      btn._swatchG.clear()
+        .circle(0, 0, swatchR)
+        .fill(btn._colorHex)
+        .stroke({ color: 0xffffff, width: 3 });
+    });
+
+    // Position secondary stamp selection popup
+    const popupH = isMobile ? 60 : 80;
+    const popupY = barY - popupH - 10;
+    const popupW = Math.min(360, engine.width * 0.85);
+
+    this.stampPopupBg.x = engine.width / 2 - popupW / 2;
+    this.stampPopupBg.y = popupY;
+    this.stampPopupGraphics.clear()
+      .roundRect(0, 0, popupW, popupH, 16)
+      .fill(0xffffff)
+      .stroke({ color: 0x4a3728, width: 3 });
+
+    const optSpacing = popupW / (STAMP_ASSETS.length + 1);
+    this.stampOptionButtons.forEach((btn, i) => {
+      btn.x = this.stampPopupBg.x + optSpacing * (i + 1);
+      btn.y = popupY + popupH / 2;
+
+      btn._optG.clear()
+        .roundRect(-24, -24, 48, 48, 8)
+        .fill(0xf4f4f4)
+        .stroke({ color: 0xcccccc, width: 2 });
+    });
+  },
+
+  _updateUIHighlighting() {
+    // Highlight active tool button by slightly scaling it up and adding thick outline
+    const isMobile = this.promptLabel.style.fontSize < 24;
+    const btnSize = isMobile ? 48 : 64;
+
+    this.btnBrush.scale.set(this.currentTool === 'brush' ? 1.15 : 1.0);
+    this.btnEraser.scale.set(this.currentTool === 'eraser' ? 1.15 : 1.0);
+    this.btnStamp.scale.set(this.currentTool === 'stamp' ? 1.15 : 1.0);
+
+    // Outline active swatch
+    this.colorButtons.forEach((btn) => {
+      const swatchR = isMobile ? 14 : 22;
+      const isActive = (btn._colorHex === this.currentColorHex) && (this.currentTool !== 'eraser');
+      btn._swatchG.clear()
+        .circle(0, 0, swatchR)
+        .fill(btn._colorHex)
+        .stroke({ color: isActive ? 0x000000 : 0xffffff, width: isActive ? 4 : 2.5 });
+      btn.scale.set(isActive ? 1.18 : 1.0);
+    });
+
+    // Show/hide stamp selection popup
+    this.stampPopupBg.visible = (this.currentTool === 'stamp');
+    this.stampOptionButtons.forEach(btn => btn.visible = (this.currentTool === 'stamp'));
+
+    // Highlight active stamp selection option
+    if (this.currentTool === 'stamp') {
+      this.stampOptionButtons.forEach((btn) => {
+        const isActive = (btn._stampInfo.id === this.selectedStamp.id);
+        btn._optG.clear()
+          .roundRect(-24, -24, 48, 48, 8)
+          .fill(isActive ? 0xffcc00 : 0xf4f4f4)
+          .stroke({ color: isActive ? 0x4a3728 : 0xcccccc, width: 3 });
+        btn.scale.set(isActive ? 1.15 : 1.0);
+      });
     }
   },
 
-  _triggerAutoComplete(engine) {
-    if (this._completing) return;
-    this._completing = true;
-    this.autoCompleted = true;
+  _selectTool(tool, engine) {
+    this.currentTool = tool;
+    engine.audio.play('brush_stroke', { volume: 0.5 });
+    
+    // Scale bounce on click
+    const btn = tool === 'brush' ? this.btnBrush : (tool === 'eraser' ? this.btnEraser : this.btnStamp);
+    engine.animate(btn, { scale: 1.35 }, 0.1, 'easeOut')
+      .then(() => this._updateUIHighlighting());
+  },
 
-    // Play reveal whoosh
+  _selectColor(colorHex, engine) {
+    this.currentColorHex = colorHex;
+    // Auto switch back to brush if stamp or eraser was active but they select a color
+    if (this.currentTool === 'eraser') {
+      this.currentTool = 'brush';
+    }
+    engine.audio.play('brush_stroke', { volume: 0.5 });
+    this._updateUIHighlighting();
+  },
+
+  _selectStamp(stamp, engine) {
+    this.selectedStamp = stamp;
+    engine.audio.play('brush_stroke', { volume: 0.5 });
+    this._updateUIHighlighting();
+  },
+
+  _drawStroke(x1, y1, x2, y2, engine) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    // Interpolate points for solid round stroke coverage
+    const steps = Math.ceil(dist / Math.max(2, this.brushSize * 0.15));
+    
+    this.brushGraphics.clear();
+    for (let i = 0; i <= steps; i++) {
+      const t = steps === 0 ? 0 : i / steps;
+      const cx = x1 + dx * t;
+      const cy = y1 + dy * t;
+      this.brushGraphics.circle(cx, cy, this.brushSize / 2);
+    }
+
+    if (this.currentTool === 'eraser') {
+      this.brushGraphics.blendMode = 'erase';
+      this.brushGraphics.fill({ color: 0xffffff });
+    } else {
+      this.brushGraphics.blendMode = 'normal';
+      this.brushGraphics.fill({ color: this.currentColorHex });
+    }
+
+    engine.renderToTexture(this.brushGraphics, this.canvasTexture, false);
+  },
+
+  _placeStamp(x, y, engine) {
+    const stampSprite = new PIXI.Sprite(PIXI.Assets.get(this.selectedStamp.asset));
+    stampSprite.anchor.set(0.5);
+    stampSprite.x = x;
+    stampSprite.y = y;
+    stampSprite.scale.set(0.95);
+    
+    // Draw directly onto the texture
+    engine.renderToTexture(stampSprite, this.canvasTexture, false);
+    stampSprite.destroy();
+
+    // Play pleasant discovery stamp sound
+    engine.audio.play('brush_stroke');
+
+    // Spawn tiny sparkles at stamp location
+    this._burstSparkles(x, y, engine);
+  },
+
+  _clearCanvas(engine) {
     engine.audio.play('reveal_whoosh');
 
-    if (!this.isPreviewMode) {
-      // Tween fog alpha 0 over 600ms for melting effect
-      engine.animate(this.fogSprite, { alpha: 0 }, 0.6, 'easeOut').then(() => {
-        this._spawnSparkles(engine);
-        // Subject name after 1.5s
-        this._subjectTimer = 1.5;
-        this._nextSceneTimer = 3.0;
+    // Clear graphics texture
+    const clearG = new PIXI.Graphics();
+    clearG.rect(0, 0, engine.width, engine.height).fill(0xffffff);
+    engine.renderToTexture(clearG, this.canvasTexture, true);
+    clearG.destroy();
+
+    // Bounce trash button
+    engine.animate(this.btnClear, { scale: 0.8 }, 0.08, 'easeOut')
+      .then(() => engine.animate(this.btnClear, { scale: 1.0 }, 0.1, 'bounce'));
+  },
+
+  _burstSparkles(x, y, engine) {
+    const count = 6;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 40 + Math.random() * 80;
+      const s = engine.spawn({
+        id: `sparkle_${Date.now()}_${Math.random()}`,
+        asset: 'particle_sparkle',
+        x, y,
+        scale: 0.3 + Math.random() * 0.3,
+        zIndex: 10
       });
-    } else {
-      this.bgSprite.alpha = 1;
-      this._spawnSparkles(engine);
-      this._subjectTimer = 1.5;
-      this._nextSceneTimer = 3.0;
+      s._vx = Math.cos(angle) * speed;
+      s._vy = Math.sin(angle) * speed;
+      this.sparkles.push(s);
     }
-  },
-
-  _spawnSparkles(engine) {
-    // Sparkle burst celebration
-    this.sparkleTimer = 2.0; // spawn sparkles for 2 seconds
-    for (let i = 0; i < 15; i++) {
-      this._spawnSparkle(engine, 100 + Math.random() * (engine.width - 200), 100 + Math.random() * (engine.height - 200));
-    }
-
-    // Animate bgSprite (slight pulse scale zoom)
-    const baseScale = this.bgSprite.scale.x;
-    engine.animate(this.bgSprite, { scale: baseScale * 1.05 }, 0.3, 'easeOut')
-      .then(() => engine.animate(this.bgSprite, { scale: baseScale }, 0.2, 'bounce'));
-  },
-
-  _announceSubject(engine) {
-    const sceneKey = this.sceneQueue[this.sceneIndex];
-    const subjectName = SCENE_NAMES[sceneKey];
-
-    // Spawn text label
-    this.nameLabel = engine.spawn({
-      id: 'subject_name',
-      text: subjectName,
-      fontSize: 54,
-      color: '#d35400',
-      x: engine.width / 2,
-      y: engine.height / 2,
-      zIndex: 15
-    });
-    this.nameLabel.scale.set(0);
-
-    // Pop text label
-    engine.animate(this.nameLabel, { scale: 1.2 }, 0.3, 'easeOut')
-      .then(() => engine.animate(this.nameLabel, { scale: 1.0 }, 0.15, 'bounce'));
-
-    // Play animal sound
-    const animalSound = SCENE_SOUNDS[sceneKey];
-    engine.audio.play(animalSound);
-  },
-
-  _nextScene(engine) {
-    // Clean up current scene sprites
-    engine.destroy(this.bgSprite);
-    engine.destroy(this.fogSprite);
-    if (this.nameLabel) engine.destroy(this.nameLabel);
-    if (this.maskSprite) engine.destroy(this.maskSprite);
-    if (this.brushGraphics) this.brushGraphics.destroy({ children: true });
-
-    this.sceneIndex++;
-    if (this.sceneIndex < this.sceneQueue.length) {
-      this._loadScene(engine);
-    } else {
-      // All scenes finished
-      engine.audio.play('win_jingle');
-      engine.system.triggerWinState({
-        title: 'MASTER COLORIST!',
-        message: 'You revealed all the beautiful pictures!',
-        onReplay: () => this.init(engine),
-        onExit: () => engine.system.exit(),
-      });
-    }
-  },
-
-  _spawnSparkle(engine, x, y) {
-    const s = engine.spawn({
-      id: `sparkle_${Date.now()}_${Math.random()}`,
-      asset: 'particle_sparkle',
-      x, y,
-      scale: 0.3 + Math.random() * 0.4,
-      zIndex: 10
-    });
-    engine.animate(s, { y: y - 50, alpha: 0, angle: 180 }, 0.8, 'easeOut')
-      .then(() => engine.destroy(s));
   },
 
   preview(miniEngine) {
     this.t = 0;
-    this.bgSprite = miniEngine.spawn({ asset: 'scene_dog', color: '#ffb300', x: miniEngine.width/2, y: miniEngine.height/2, scale: 0.16 });
-    this.fogSprite = miniEngine.spawn({ asset: 'scene_fog', color: '#7f8c8d', x: miniEngine.width/2, y: miniEngine.height/2, scale: 0.16, alpha: 0.8 });
+    // Spawn simple colorful preview graphics
+    this.prevG = new PIXI.Graphics();
+    this.prevG.rect(0, 0, miniEngine.width, miniEngine.height).fill(0xffffff);
+    this.prevG.circle(miniEngine.width/2, miniEngine.height/2, 40).fill(0x34c759);
+    this.prevG.circle(miniEngine.width/2 - 50, miniEngine.height/2 - 20, 30).fill(0xff3b30);
+    this.prevG.circle(miniEngine.width/2 + 50, miniEngine.height/2 + 20, 25).fill(0x007aff);
+    
+    const sprite = new PIXI.Sprite(miniEngine.app.renderer.generateTexture(this.prevG));
+    miniEngine.app.stage.addChild(sprite);
   },
 
-  previewUpdate(miniEngine, dt) {
-    this.t += dt;
-    // Simulate drag scratching by fading out the fog overlay
-    if (this.t > 1 && this.t < 2.5) {
-      this.fogSprite.alpha = Math.max(0, 0.8 - (this.t - 1) * 0.53);
-    }
-    if (this.t > 4) {
-      this.t = 0;
-      this.fogSprite.alpha = 0.8;
-    }
-  }
+  previewUpdate(miniEngine, dt) {}
 
 };

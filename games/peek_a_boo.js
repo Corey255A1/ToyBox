@@ -25,7 +25,7 @@ export default {
       'ui_dot_empty', 'ui_dot_filled'
     ],
     audio: [
-      'door_creak_open', 'door_close', 'door_knock',
+      'door_creak_open', 'door_close', 'door_knock', 'sound_boing',
       'sound_moo', 'sound_quack', 'sound_ribbit', 'sound_oink',
       'sound_meow', 'sound_woof', 'sound_trumpet', 'sound_roar',
       'win_jingle'
@@ -160,6 +160,16 @@ export default {
       if (Math.abs(this.doorAngle - targetAngle) < 0.02 && Math.abs(this.angularVelocity) < 0.05) {
         this.doorState = 'OPEN';
         this.openTimer = 2.5; // Stay open for 2.5 seconds
+
+        // Play animal sound when fully opened
+        const animal = this.animalQueue[this.currentAnimalIdx];
+        engine.audio.play(animal.sound);
+
+        // Bounce animal scale on reveal
+        const targetAnimalHeight = engine.height * 0.6;
+        const animScale = targetAnimalHeight / 112;
+        engine.animate(this.animalSprite, { scale: animScale * 1.25 }, 0.2, 'easeOut')
+          .then(() => engine.animate(this.animalSprite, { scale: animScale }, 0.15, 'bounce'));
       }
     } else if (this.doorState === 'OPEN') {
       // bob the animal (PAB-4: sin(time * 4) * 8)
@@ -266,17 +276,17 @@ export default {
       // Reverse! Start opening again
       this.doorState = 'OPENING';
       this.openTimer = 2.5;
-      const animal = this.animalQueue[this.currentAnimalIdx];
-      engine.audio.play(animal.sound);
+      engine.audio.play('sound_boing');
       
       // Spawn large label again
+      const animal = this.animalQueue[this.currentAnimalIdx];
       this._spawnLargeLabel(engine, animal);
       return;
     }
 
     // CLOSED
     this.doorState = 'OPENING';
-    engine.audio.play('door_creak_open');
+    engine.audio.play('sound_boing');
 
     // Fade out tap hint after first tap
     if (this.hintLabel) {
@@ -289,9 +299,7 @@ export default {
         });
     }
 
-    // Announce animal sound immediately
     const animal = this.animalQueue[this.currentAnimalIdx];
-    engine.audio.play(animal.sound);
 
     // Update prompt text to say the animal name
     this.promptLabel.text = animal.name;
