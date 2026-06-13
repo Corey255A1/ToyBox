@@ -13,38 +13,29 @@ const COLORS = [
   { hex: 0x1c1c1e, name: 'Black' }
 ];
 
-const STAMP_ASSETS = [
-  { id: 'cat', asset: 'animal_cat', label: '🐱' },
-  { id: 'dog', asset: 'animal_dog', label: '🐶' },
-  { id: 'cow', asset: 'animal_cow', label: '🐄' },
-  { id: 'pig', asset: 'animal_pig', label: '🐷' },
-  { id: 'star', asset: 'ui_star', label: '⭐' }
-];
-
 export default {
 
   config: {
     background:      '#ffffff', // Clean white background canvas
-    interactionMode: 'drag',    // Drag to draw, also handles tapping
-    assets: [
-      'animal_cat', 'animal_dog', 'animal_cow', 'animal_pig', 'ui_star',
-      'particle_sparkle'
-    ],
-    audio: ['brush_stroke', 'reveal_whoosh', 'win_jingle'],
+    interactionMode: 'drag',    // Drag to draw, supports multi-touch
+    assets: [],                 // Zero external assets for instant loading
+    audio: [],                  // No sound at all to prevent audio context blockages
   },
 
   init(engine) {
+    this.engine = engine;
     this.currentColorHex = COLORS[0].hex; // Default Red
-    this.currentTool = 'brush';           // 'brush' | 'eraser' | 'stamp'
-    this.selectedStamp = STAMP_ASSETS[0];  // Default Cat stamp
+    this.currentTool = 'brush';           // 'brush' | 'eraser'
     
     this.brushSize = Math.max(16, engine.width * 0.04);
     this.lastPositions = {}; // Touch ID -> { x, y }
-    this.sparkles = [];
+    this.touchColors = {};   // Touch ID -> hex color
+    this.touchTools = {};    // Touch ID -> 'brush' | 'eraser'
 
     this.isPreviewMode = (engine.app == null) || (engine.width < 250);
+    this.isMobile = engine.width < 600;
 
-    // 1. Solid white background canvas sprite (explicitly spawned to ensure correct zIndex)
+    // 1. Solid white background canvas sprite
     this.bgCanvas = engine.spawn({
       id: 'bg_canvas',
       x: engine.width / 2,
@@ -55,7 +46,7 @@ export default {
     this.bgCanvasG.rect(-engine.width/2, -engine.height/2, engine.width, engine.height).fill(0xffffff);
     this.bgCanvas.addChild(this.bgCanvasG);
 
-    // 2. Create drawing canvas container
+    // 2. Create drawing canvas container and RenderTexture
     this.canvasContainer = engine.spawn({
       id: 'canvas_container',
       x: 0,
@@ -72,12 +63,18 @@ export default {
       this.canvasContainer.addChild(this.canvasSprite);
 
       this.brushGraphics = new PIXI.Graphics();
+
+      // Initialize canvas texture as solid white
+      const bgRect = new PIXI.Graphics();
+      bgRect.rect(0, 0, engine.width, engine.height).fill(0xffffff);
+      engine.renderToTexture(bgRect, this.canvasTexture, true);
+      bgRect.destroy();
     }
 
     // 3. Create Header Prompt
     this.promptLabel = engine.spawn({
       id: 'prompt_label',
-      text: '🎨 Color & Draw anything! 🎨',
+      text: '🎨 Free Paint! 🎨',
       fontSize: 26,
       color: '#4a3728',
       x: engine.width / 2,
@@ -94,37 +91,51 @@ export default {
   },
 
   update(engine, deltaTime) {
-    if (this.isPreviewMode) return;
+    if (this.isPreviewMode || !this.canvasTexture) return;
 
-    // 1. Handle Multi-touch drawing
+    // Handle Multi-touch drawing
     const currentTouches = engine.input.touches || [];
     const activeIds = new Set();
+    const barH = this.isMobile ? 180 : 240;
 
     currentTouches.forEach((touch) => {
-      // Toddler safety check: ignore touches that land on the bottom UI area
-      const isMobile = engine.width < 600;
-      const barH = isMobile ? 80 : 100;
-      const activeUiMinY = (this.currentTool === 'stamp') ? (engine.height - barH - (isMobile ? 60 : 80) - 15) : (engine.height - barH);
-      if (touch.y > activeUiMinY) {
+      // Ignore touches that land on the bottom UI area
+      if (touch.y > engine.height - barH) {
         return;
       }
 
       activeIds.add(touch.id);
-      const prev = this.lastPositions[touch.id];
-      
-      if (this.currentTool === 'stamp') {
-        // Stamp tool places a stamp once on touch start
-        if (!prev) {
-          this._placeStamp(touch.x, touch.y, engine);
-        }
-      } else {
-        // Brush/Eraser draws continuous lines
-        if (prev) {
-          this._drawStroke(prev.x, prev.y, touch.x, touch.y, engine);
-        } else {
-          this._drawStroke(touch.x, touch.y, touch.x, touch.y, engine);
-        }
+
+      // Initialize touch color and tool on pointerdown (first frame of touch)
+      if (!this.touchColors[touch.id]) {
+        this.touchColors[touch.id] = this.currentTool === 'eraser' ? 0xffffff : this.currentColorHex;
+        this.touchTools[touch.id] = this.currentTool;
       }
+
+      const prev = this.lastPositions[touch.id];
+      const color = this.touchColors[touch.id];
+      const tool = this.touchTools[touch.id];
+      const width = tool === 'eraser' ? this.brushSize * 2.5 : this.brushSize;
+
+      this.brushGraphics.clear();
+
+      if (prev) {
+        // Draw smooth line segment on graphics and render to texture
+        this.brushGraphics.moveTo(prev.x, prev.y)
+          .lineTo(touch.x, touch.y)
+          .stroke({
+            color: tool === 'eraser' ? 0xffffff : color,
+            width: width,
+            cap: 'round',
+            join: 'round'
+          });
+      } else {
+        // Draw initial touch dot
+        this.brushGraphics.circle(touch.x, touch.y, width / 2)
+          .fill(tool === 'eraser' ? 0xffffff : color);
+      }
+
+      engine.renderToTexture(this.brushGraphics, this.canvasTexture, false);
       this.lastPositions[touch.id] = { x: touch.x, y: touch.y };
     });
 
@@ -132,25 +143,17 @@ export default {
     for (const id in this.lastPositions) {
       if (!activeIds.has(Number(id))) {
         delete this.lastPositions[id];
+        delete this.touchColors[id];
+        delete this.touchTools[id];
       }
     }
-
-    // 2. Move sparkles
-    this.sparkles = this.sparkles.filter((p) => {
-      p.x += p._vx * deltaTime;
-      p.y += p._vy * deltaTime;
-      p.alpha -= 2.0 * deltaTime;
-      if (p.alpha <= 0) {
-        engine.destroy(p);
-        return false;
-      }
-      return true;
-    });
   },
 
   onEvent(engine, eventName, payload) {},
 
   onResize(engine) {
+    this.isMobile = engine.width < 600;
+
     if (this.promptLabel) {
       this.promptLabel.x = engine.width / 2;
     }
@@ -165,35 +168,42 @@ export default {
       }
     }
 
+    this.brushSize = Math.max(16, engine.width * 0.04);
+
     // Backup, resize, and restore canvas drawing texture to prevent loss of artwork
     if (!this.isPreviewMode && this.canvasTexture) {
+      const oldW = this.canvasTexture.width;
+      const oldH = this.canvasTexture.height;
       const backupTexture = PIXI.RenderTexture.create({
-        width: this.canvasTexture.width,
-        height: this.canvasTexture.height
+        width: oldW,
+        height: oldH
       });
-      
+
       const backupSprite = new PIXI.Sprite(this.canvasTexture);
       engine.renderToTexture(backupSprite, backupTexture, true);
       backupSprite.destroy();
 
       this.canvasTexture.resize(engine.width, engine.height);
 
-      const restoreSprite = new PIXI.Sprite(backupTexture);
-      engine.renderToTexture(restoreSprite, this.canvasTexture, true);
-      restoreSprite.destroy();
-      backupTexture.destroy();
-    }
+      const bgRect = new PIXI.Graphics();
+      bgRect.rect(0, 0, engine.width, engine.height).fill(0xffffff);
+      engine.renderToTexture(bgRect, this.canvasTexture, true);
+      bgRect.destroy();
 
-    this.brushSize = Math.max(16, engine.width * 0.04);
+      const restoreSprite = new PIXI.Sprite(backupTexture);
+      engine.renderToTexture(restoreSprite, this.canvasTexture, false);
+      restoreSprite.destroy();
+
+      backupTexture.destroy(true);
+    }
 
     this._repositionUI(engine);
   },
 
   _createUI(engine) {
     this.colorButtons = [];
-    this.stampOptionButtons = [];
 
-    // Create a background panel for the bottom toolbar
+    // Bottom toolbar background panel
     this.toolbarBg = engine.spawn({
       id: 'toolbar_bg',
       zIndex: 5
@@ -201,91 +211,69 @@ export default {
     this.toolbarGraphics = new PIXI.Graphics();
     this.toolbarBg.addChild(this.toolbarGraphics);
 
-    // Create main tool buttons (Brush, Eraser, Stamp, Clear)
+    // Large main tool buttons (Brush, Eraser, Clear)
     this.btnBrush = engine.spawn({
       id: 'btn_tool_brush',
-      zIndex: 6,
-      onTouch: () => this._selectTool('brush', engine)
+      zIndex: 6
     });
     this.btnBrushGraphics = new PIXI.Graphics();
     this.btnBrush.addChild(this.btnBrushGraphics);
+    this.btnBrush.eventMode = 'static';
+    this.btnBrush.on('pointerdown', (e) => {
+      e.stopPropagation();
+      this._selectTool('brush');
+    });
 
     this.btnEraser = engine.spawn({
       id: 'btn_tool_eraser',
-      zIndex: 6,
-      onTouch: () => this._selectTool('eraser', engine)
+      zIndex: 6
     });
     this.btnEraserGraphics = new PIXI.Graphics();
     this.btnEraser.addChild(this.btnEraserGraphics);
-
-    this.btnStamp = engine.spawn({
-      id: 'btn_tool_stamp',
-      zIndex: 6,
-      onTouch: () => this._selectTool('stamp', engine)
+    this.btnEraser.eventMode = 'static';
+    this.btnEraser.on('pointerdown', (e) => {
+      e.stopPropagation();
+      this._selectTool('eraser');
     });
-    this.btnStampGraphics = new PIXI.Graphics();
-    this.btnStamp.addChild(this.btnStampGraphics);
 
     this.btnClear = engine.spawn({
       id: 'btn_tool_clear',
-      zIndex: 6,
-      onTouch: () => this._clearCanvas(engine)
+      zIndex: 6
     });
     this.btnClearGraphics = new PIXI.Graphics();
     this.btnClear.addChild(this.btnClearGraphics);
+    this.btnClear.eventMode = 'static';
+    this.btnClear.on('pointerdown', (e) => {
+      e.stopPropagation();
+      this._clearCanvas();
+    });
 
     // Create Color Swatches
     COLORS.forEach((color, i) => {
       const btn = engine.spawn({
         id: `btn_color_${color.name.toLowerCase()}`,
-        zIndex: 6,
-        onTouch: () => this._selectColor(color.hex, engine)
+        zIndex: 6
       });
       const swatchG = new PIXI.Graphics();
       btn.addChild(swatchG);
       btn._swatchG = swatchG;
       btn._colorHex = color.hex;
+      
+      btn.eventMode = 'static';
+      btn.on('pointerdown', (e) => {
+        e.stopPropagation();
+        this._selectColor(color.hex);
+      });
+      
       this.colorButtons.push(btn);
     });
 
-    // Create Secondary Stamp popup panel (initially hidden)
-    this.stampPopupBg = engine.spawn({
-      id: 'stamp_popup_bg',
-      zIndex: 8
-    });
-    this.stampPopupGraphics = new PIXI.Graphics();
-    this.stampPopupBg.addChild(this.stampPopupGraphics);
-    this.stampPopupBg.visible = false;
-
-    STAMP_ASSETS.forEach((stamp, i) => {
-      const btn = engine.spawn({
-        id: `btn_stamp_opt_${stamp.id}`,
-        zIndex: 9,
-        onTouch: () => this._selectStamp(stamp, engine)
-      });
-      const optG = new PIXI.Graphics();
-      btn.addChild(optG);
-      
-      const textLabel = new PIXI.Text({
-        text: stamp.label,
-        style: new PIXI.TextStyle({ fontSize: 28 })
-      });
-      textLabel.anchor.set(0.5);
-      btn.addChild(textLabel);
-
-      btn._optG = optG;
-      btn._stampInfo = stamp;
-      this.stampOptionButtons.push(btn);
-    });
-
-    // Position everything initially
     this._repositionUI(engine);
     this._updateUIHighlighting();
   },
 
   _repositionUI(engine) {
-    const isMobile = engine.width < 600;
-    const barH = isMobile ? 80 : 100;
+    const barH = this.isMobile ? 180 : 240; // tall space on desktop
     const barY = engine.height - barH;
 
     // Draw main toolbar background
@@ -294,243 +282,155 @@ export default {
     this.toolbarBg.x = 0;
     this.toolbarBg.y = barY;
 
-    // Position tool buttons
-    const btnSize = isMobile ? 48 : 64;
-    const margin = isMobile ? 12 : 24;
+    // Spacing and sizing calculations for toddler usability
+    const swatchR = this.isMobile ? 26 : 38; // extremely large circles for toddlers
+    const toolW = this.isMobile ? 110 : 180;
+    const toolH = this.isMobile ? 55 : 80;
 
-    this.btnBrush.x = margin + btnSize / 2;
-    this.btnBrush.y = barY + barH / 2;
-    this.btnBrushGraphics.clear()
-      .roundRect(-btnSize/2, -btnSize/2, btnSize, btnSize, 12)
-      .fill(0xffffff)
-      .stroke({ color: 0x4a3728, width: 3 });
-    // draw a simple brush stroke preview inside
-    this.btnBrushGraphics.circle(0, 0, btnSize * 0.2).fill(0xe94560);
-
-    this.btnEraser.x = margin + btnSize * 1.5 + 8;
-    this.btnEraser.y = barY + barH / 2;
-    this.btnEraserGraphics.clear()
-      .roundRect(-btnSize/2, -btnSize/2, btnSize, btnSize, 12)
-      .fill(0xffffff)
-      .stroke({ color: 0x4a3728, width: 3 });
-    // draw a pink rectangle inside for eraser representation
-    this.btnEraserGraphics.roundRect(-btnSize * 0.25, -btnSize * 0.15, btnSize * 0.5, btnSize * 0.3, 4).fill(0xff2d55);
-
-    this.btnStamp.x = margin + btnSize * 2.5 + 16;
-    this.btnStamp.y = barY + barH / 2;
-    this.btnStampGraphics.clear()
-      .roundRect(-btnSize/2, -btnSize/2, btnSize, btnSize, 12)
-      .fill(0xffffff)
-      .stroke({ color: 0x4a3728, width: 3 });
-    // draw a little star shape inside
-    this.btnStampGraphics.circle(0, 0, btnSize * 0.22).fill(0xffcc00);
-
-    this.btnClear.x = engine.width - margin - btnSize / 2;
-    this.btnClear.y = barY + barH / 2;
-    this.btnClearGraphics.clear()
-      .roundRect(-btnSize/2, -btnSize/2, btnSize, btnSize, 12)
-      .fill(0xffe5e5)
-      .stroke({ color: 0xd32f2f, width: 3 });
-    // draw a trash icon (red cross)
-    this.btnClearGraphics.rect(-2, -12, 4, 24).fill(0xd32f2f);
-    this.btnClearGraphics.rect(-12, -2, 24, 4).fill(0xd32f2f);
-    this.btnClearGraphics.rotation = Math.PI / 4;
-
-    // Position color swatches
-    const leftBound = this.btnStamp.x + btnSize / 2 + (isMobile ? 12 : 24);
-    const rightBound = this.btnClear.x - btnSize / 2 - (isMobile ? 12 : 24);
-    const swatchAreaW = rightBound - leftBound;
-    const swatchSpacing = swatchAreaW / (COLORS.length - 1);
-    const swatchR = isMobile ? 14 : 22;
-
+    // Row 1 Y (Colors)
+    const row1Y = barY + (this.isMobile ? 45 : 65);
+    const swatchSpacing = engine.width / COLORS.length;
     this.colorButtons.forEach((btn, i) => {
-      btn.x = leftBound + i * swatchSpacing;
-      btn.y = barY + barH / 2;
-      
+      btn.x = swatchSpacing * i + swatchSpacing / 2;
+      btn.y = row1Y;
       btn._swatchG.clear()
         .circle(0, 0, swatchR)
         .fill(btn._colorHex)
         .stroke({ color: 0xffffff, width: 3 });
+      
+      btn.hitArea = new PIXI.Circle(0, 0, swatchR * 1.4);
     });
 
-    // Position secondary stamp selection popup
-    const popupH = isMobile ? 60 : 80;
-    const popupY = barY - popupH - 10;
-    const popupW = Math.min(360, engine.width * 0.85);
+    // Row 2 Y (Tools)
+    const row2Y = barY + (this.isMobile ? 125 : 165);
+    const numTools = 3;
+    const toolSpacing = engine.width / (numTools + 1);
 
-    this.stampPopupBg.x = engine.width / 2 - popupW / 2;
-    this.stampPopupBg.y = popupY;
-    this.stampPopupGraphics.clear()
-      .roundRect(0, 0, popupW, popupH, 16)
+    this.btnBrush.x = toolSpacing * 1;
+    this.btnBrush.y = row2Y;
+    this.btnBrushGraphics.clear()
+      .roundRect(-toolW/2, -toolH/2, toolW, toolH, 16)
       .fill(0xffffff)
-      .stroke({ color: 0x4a3728, width: 3 });
+      .stroke({ color: 0x4a3728, width: 4 });
+    this.btnBrush.hitArea = new PIXI.Rectangle(-toolW/2, -toolH/2, toolW, toolH);
 
-    const optSpacing = popupW / (STAMP_ASSETS.length + 1);
-    this.stampOptionButtons.forEach((btn, i) => {
-      btn.x = this.stampPopupBg.x + optSpacing * (i + 1);
-      btn.y = popupY + popupH / 2;
-
-      btn._optG.clear()
-        .roundRect(-24, -24, 48, 48, 8)
-        .fill(0xf4f4f4)
-        .stroke({ color: 0xcccccc, width: 2 });
+    // Text label
+    if (this.btnBrushText) this.btnBrush.removeChild(this.btnBrushText);
+    this.btnBrushText = new PIXI.Text({
+      text: '🖌 Paint',
+      style: new PIXI.TextStyle({ fontSize: this.isMobile ? 18 : 24, fill: '#4a3728', fontWeight: 'bold' })
     });
+    this.btnBrushText.anchor.set(0.5);
+    this.btnBrush.addChild(this.btnBrushText);
+
+    this.btnEraser.x = toolSpacing * 2;
+    this.btnEraser.y = row2Y;
+    this.btnEraserGraphics.clear()
+      .roundRect(-toolW/2, -toolH/2, toolW, toolH, 16)
+      .fill(0xffffff)
+      .stroke({ color: 0x4a3728, width: 4 });
+    this.btnEraser.hitArea = new PIXI.Rectangle(-toolW/2, -toolH/2, toolW, toolH);
+
+    // Text label
+    if (this.btnEraserText) this.btnEraser.removeChild(this.btnEraserText);
+    this.btnEraserText = new PIXI.Text({
+      text: '🧽 Eraser',
+      style: new PIXI.TextStyle({ fontSize: this.isMobile ? 18 : 24, fill: '#4a3728', fontWeight: 'bold' })
+    });
+    this.btnEraserText.anchor.set(0.5);
+    this.btnEraser.addChild(this.btnEraserText);
+
+    this.btnClear.x = toolSpacing * 3;
+    this.btnClear.y = row2Y;
+    this.btnClearGraphics.clear()
+      .roundRect(-toolW/2, -toolH/2, toolW, toolH, 16)
+      .fill(0xffe5e5)
+      .stroke({ color: 0xd32f2f, width: 4 });
+    this.btnClear.hitArea = new PIXI.Rectangle(-toolW/2, -toolH/2, toolW, toolH);
+
+    // Text label
+    if (this.btnClearText) this.btnClear.removeChild(this.btnClearText);
+    this.btnClearText = new PIXI.Text({
+      text: '🗑 Clear',
+      style: new PIXI.TextStyle({ fontSize: this.isMobile ? 18 : 24, fill: '#d32f2f', fontWeight: 'bold' })
+    });
+    this.btnClearText.anchor.set(0.5);
+    this.btnClear.addChild(this.btnClearText);
   },
 
   _updateUIHighlighting() {
-    // Highlight active tool button by slightly scaling it up and adding thick outline
-    const isMobile = this.promptLabel.style.fontSize < 24;
-    const btnSize = isMobile ? 48 : 64;
+    const swatchR = this.isMobile ? 26 : 38;
 
-    this.btnBrush.scale.set(this.currentTool === 'brush' ? 1.15 : 1.0);
-    this.btnEraser.scale.set(this.currentTool === 'eraser' ? 1.15 : 1.0);
-    this.btnStamp.scale.set(this.currentTool === 'stamp' ? 1.15 : 1.0);
+    this.btnBrush.scale.set(this.currentTool === 'brush' ? 1.12 : 1.0);
+    this.btnEraser.scale.set(this.currentTool === 'eraser' ? 1.12 : 1.0);
 
     // Outline active swatch
     this.colorButtons.forEach((btn) => {
-      const swatchR = isMobile ? 14 : 22;
       const isActive = (btn._colorHex === this.currentColorHex) && (this.currentTool !== 'eraser');
       btn._swatchG.clear()
         .circle(0, 0, swatchR)
         .fill(btn._colorHex)
-        .stroke({ color: isActive ? 0x000000 : 0xffffff, width: isActive ? 4 : 2.5 });
-      btn.scale.set(isActive ? 1.18 : 1.0);
+        .stroke({ color: isActive ? 0x000000 : 0xffffff, width: isActive ? 5 : 3 });
+      btn.scale.set(isActive ? 1.15 : 1.0);
     });
-
-    // Show/hide stamp selection popup
-    this.stampPopupBg.visible = (this.currentTool === 'stamp');
-    this.stampOptionButtons.forEach(btn => btn.visible = (this.currentTool === 'stamp'));
-
-    // Highlight active stamp selection option
-    if (this.currentTool === 'stamp') {
-      this.stampOptionButtons.forEach((btn) => {
-        const isActive = (btn._stampInfo.id === this.selectedStamp.id);
-        btn._optG.clear()
-          .roundRect(-24, -24, 48, 48, 8)
-          .fill(isActive ? 0xffcc00 : 0xf4f4f4)
-          .stroke({ color: isActive ? 0x4a3728 : 0xcccccc, width: 3 });
-        btn.scale.set(isActive ? 1.15 : 1.0);
-      });
-    }
   },
 
-  _selectTool(tool, engine) {
+  _selectTool(tool) {
     this.currentTool = tool;
-    engine.audio.play('brush_stroke', { volume: 0.5 });
-    
-    // Scale bounce on click
-    const btn = tool === 'brush' ? this.btnBrush : (tool === 'eraser' ? this.btnEraser : this.btnStamp);
-    engine.animate(btn, { scale: 1.35 }, 0.1, 'easeOut')
-      .then(() => this._updateUIHighlighting());
+    this._updateUIHighlighting();
   },
 
-  _selectColor(colorHex, engine) {
+  _selectColor(colorHex) {
     this.currentColorHex = colorHex;
-    // Auto switch back to brush if stamp or eraser was active but they select a color
     if (this.currentTool === 'eraser') {
       this.currentTool = 'brush';
     }
-    engine.audio.play('brush_stroke', { volume: 0.5 });
     this._updateUIHighlighting();
   },
 
-  _selectStamp(stamp, engine) {
-    this.selectedStamp = stamp;
-    engine.audio.play('brush_stroke', { volume: 0.5 });
-    this._updateUIHighlighting();
-  },
-
-  _drawStroke(x1, y1, x2, y2, engine) {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    
-    // Interpolate points for solid round stroke coverage
-    const steps = Math.ceil(dist / Math.max(2, this.brushSize * 0.15));
-    
-    this.brushGraphics.clear();
-    
-    if (this.currentTool === 'eraser') {
-      this.brushGraphics.blendMode = 'erase';
-    } else {
-      this.brushGraphics.blendMode = 'normal';
+  _clearCanvas() {
+    if (this.canvasTexture) {
+      const emptyG = new PIXI.Graphics();
+      this.engine.renderToTexture(emptyG, this.canvasTexture, true);
+      emptyG.destroy();
     }
-
-    for (let i = 0; i <= steps; i++) {
-      const t = steps === 0 ? 0 : i / steps;
-      const cx = x1 + dx * t;
-      const cy = y1 + dy * t;
-      this.brushGraphics.circle(cx, cy, this.brushSize / 2);
-    }
-
-    const color = this.currentTool === 'eraser' ? 0xffffff : this.currentColorHex;
-    this.brushGraphics.fill(color);
-
-    engine.renderToTexture(this.brushGraphics, this.canvasTexture, false);
-  },
-
-  _placeStamp(x, y, engine) {
-    const stampSprite = new PIXI.Sprite(PIXI.Assets.get(this.selectedStamp.asset));
-    stampSprite.anchor.set(0.5);
-    stampSprite.x = x;
-    stampSprite.y = y;
-    stampSprite.scale.set(0.95);
-    
-    // Draw directly onto the texture
-    engine.renderToTexture(stampSprite, this.canvasTexture, false);
-    stampSprite.destroy();
-
-    // Play pleasant discovery stamp sound
-    engine.audio.play('brush_stroke');
-
-    // Spawn tiny sparkles at stamp location
-    this._burstSparkles(x, y, engine);
-  },
-
-  _clearCanvas(engine) {
-    engine.audio.play('reveal_whoosh');
-
-    // Clear graphics texture
-    const emptyG = new PIXI.Graphics();
-    engine.renderToTexture(emptyG, this.canvasTexture, true);
-    emptyG.destroy();
-
-    // Bounce trash button
-    engine.animate(this.btnClear, { scale: 0.8 }, 0.08, 'easeOut')
-      .then(() => engine.animate(this.btnClear, { scale: 1.0 }, 0.1, 'bounce'));
-  },
-
-  _burstSparkles(x, y, engine) {
-    const count = 6;
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 40 + Math.random() * 80;
-      const s = engine.spawn({
-        id: `sparkle_${Date.now()}_${Math.random()}`,
-        asset: 'particle_sparkle',
-        x, y,
-        scale: 0.3 + Math.random() * 0.3,
-        zIndex: 10
-      });
-      s._vx = Math.cos(angle) * speed;
-      s._vy = Math.sin(angle) * speed;
-      this.sparkles.push(s);
-    }
+    // Bounce clear button
+    this.btnClear.scale.set(0.9);
+    setTimeout(() => this.btnClear.scale.set(1.0), 100);
   },
 
   preview(miniEngine) {
     this.t = 0;
-    // Spawn simple colorful preview graphics
-    this.prevG = new PIXI.Graphics();
-    this.prevG.rect(0, 0, miniEngine.width, miniEngine.height).fill(0xffffff);
-    this.prevG.circle(miniEngine.width/2, miniEngine.height/2, 40).fill(0x34c759);
-    this.prevG.circle(miniEngine.width/2 - 50, miniEngine.height/2 - 20, 30).fill(0xff3b30);
-    this.prevG.circle(miniEngine.width/2 + 50, miniEngine.height/2 + 20, 25).fill(0x007aff);
-    
-    const sprite = new PIXI.Sprite(miniEngine.app.renderer.generateTexture(this.prevG));
-    miniEngine.app.stage.addChild(sprite);
+    this.previewBalls = [];
+
+    const colors = ['#ff3b30', '#ffcc00', '#34c759', '#007aff'];
+    const positions = [
+      { x: miniEngine.width * 0.3, y: miniEngine.height * 0.4 },
+      { x: miniEngine.width * 0.5, y: miniEngine.height * 0.6 },
+      { x: miniEngine.width * 0.7, y: miniEngine.height * 0.35 },
+      { x: miniEngine.width * 0.45, y: miniEngine.height * 0.3 }
+    ];
+
+    colors.forEach((color, i) => {
+      const ball = miniEngine.spawn({
+        asset: 'ball',
+        color: color,
+        x: positions[i].x,
+        y: positions[i].y,
+        scale: 0.1
+      });
+      this.previewBalls.push(ball);
+      miniEngine.animate(ball, { scale: 1.4 }, 0.4 + i * 0.2, 'easeOut');
+    });
   },
 
-  previewUpdate(miniEngine, dt) {}
+  previewUpdate(miniEngine, dt) {
+    this.t += dt;
+    this.previewBalls.forEach((ball, i) => {
+      const angle = this.t * 1.5 + i * Math.PI / 2;
+      ball.x += Math.cos(angle) * 0.15;
+      ball.y += Math.sin(angle) * 0.15;
+    });
+  }
 
 };

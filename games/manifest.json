@@ -20,11 +20,11 @@
   {
     "id": "digital-coloring",
     "title": "Digital Coloring",
-    "description": "Swipe to reveal beautiful, vibrant pre-colored scenes!",
+    "description": "Draw and paint on the screen with huge colorful brushes!",
     "icon": "scene_lion",
     "scriptPath": "games/digital_coloring.js",
     "ageRange": "2-4",
-    "tags": ["painting", "reveal", "creative"]
+    "tags": ["painting", "free-paint", "creative", "multitouch"]
   },
   {
     "id": "peek-a-boo",
