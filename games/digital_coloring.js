@@ -44,20 +44,37 @@ export default {
 
     this.isPreviewMode = (engine.app == null) || (engine.width < 250);
 
-    // 1. Create drawing canvas texture
+    // 1. Solid white background canvas sprite (explicitly spawned to ensure correct zIndex)
+    this.bgCanvas = engine.spawn({
+      id: 'bg_canvas',
+      x: engine.width / 2,
+      y: engine.height / 2,
+      zIndex: 1
+    });
+    this.bgCanvasG = new PIXI.Graphics();
+    this.bgCanvasG.rect(-engine.width/2, -engine.height/2, engine.width, engine.height).fill(0xffffff);
+    this.bgCanvas.addChild(this.bgCanvasG);
+
+    // 2. Create drawing canvas container
+    this.canvasContainer = engine.spawn({
+      id: 'canvas_container',
+      x: 0,
+      y: 0,
+      zIndex: 2
+    });
+
     if (!this.isPreviewMode) {
       this.canvasTexture = PIXI.RenderTexture.create({
         width: engine.width,
         height: engine.height
       });
       this.canvasSprite = new PIXI.Sprite(this.canvasTexture);
-      this.canvasSprite.zIndex = 1;
-      engine.app.stage.addChild(this.canvasSprite);
+      this.canvasContainer.addChild(this.canvasSprite);
 
       this.brushGraphics = new PIXI.Graphics();
     }
 
-    // 2. Create Header Prompt
+    // 3. Create Header Prompt
     this.promptLabel = engine.spawn({
       id: 'prompt_label',
       text: '🎨 Color & Draw anything! 🎨',
@@ -72,7 +89,7 @@ export default {
       this.promptLabel.style.strokeThickness = 4;
     }
 
-    // 3. Build UI controls (circular color swatches + tool buttons)
+    // 4. Build UI controls
     this._createUI(engine);
   },
 
@@ -128,13 +145,21 @@ export default {
     });
   },
 
-  onEvent(engine, eventName, payload) {
-    // We handle custom taps for stamps or clear canvas
-  },
+  onEvent(engine, eventName, payload) {},
 
   onResize(engine) {
     if (this.promptLabel) {
       this.promptLabel.x = engine.width / 2;
+    }
+
+    if (this.bgCanvas) {
+      this.bgCanvas.x = engine.width / 2;
+      this.bgCanvas.y = engine.height / 2;
+      if (this.bgCanvasG) {
+        this.bgCanvasG.clear()
+          .rect(-engine.width/2, -engine.height/2, engine.width, engine.height)
+          .fill(0xffffff);
+      }
     }
 
     // Backup, resize, and restore canvas drawing texture to prevent loss of artwork
@@ -421,19 +446,20 @@ export default {
     const steps = Math.ceil(dist / Math.max(2, this.brushSize * 0.15));
     
     this.brushGraphics.clear();
+    
+    if (this.currentTool === 'eraser') {
+      this.brushGraphics.blendMode = 'erase';
+    } else {
+      this.brushGraphics.blendMode = 'normal';
+    }
+
+    const fillConfig = { color: this.currentTool === 'eraser' ? 0xffffff : this.currentColorHex };
+
     for (let i = 0; i <= steps; i++) {
       const t = steps === 0 ? 0 : i / steps;
       const cx = x1 + dx * t;
       const cy = y1 + dy * t;
-      this.brushGraphics.circle(cx, cy, this.brushSize / 2);
-    }
-
-    if (this.currentTool === 'eraser') {
-      this.brushGraphics.blendMode = 'erase';
-      this.brushGraphics.fill({ color: 0xffffff });
-    } else {
-      this.brushGraphics.blendMode = 'normal';
-      this.brushGraphics.fill({ color: this.currentColorHex });
+      this.brushGraphics.circle(cx, cy, this.brushSize / 2).fill(fillConfig);
     }
 
     engine.renderToTexture(this.brushGraphics, this.canvasTexture, false);
@@ -461,10 +487,9 @@ export default {
     engine.audio.play('reveal_whoosh');
 
     // Clear graphics texture
-    const clearG = new PIXI.Graphics();
-    clearG.rect(0, 0, engine.width, engine.height).fill(0xffffff);
-    engine.renderToTexture(clearG, this.canvasTexture, true);
-    clearG.destroy();
+    const emptyG = new PIXI.Graphics();
+    engine.renderToTexture(emptyG, this.canvasTexture, true);
+    emptyG.destroy();
 
     // Bounce trash button
     engine.animate(this.btnClear, { scale: 0.8 }, 0.08, 'easeOut')
