@@ -43,11 +43,11 @@ export default {
     this.animalQueue = [...ANIMAL_LIST].sort(() => Math.random() - 0.5);
     this.currentAnimalIdx = 0;
     this.revealedThisCycle = 0;
-
+ 
     // Dimensions
-    this.doorW = Math.min(220, engine.width * 0.35);
-    this.doorH = this.doorW * 1.5;
-
+    this.doorH = Math.min(300, Math.min(engine.height * 0.45, engine.width * 0.52));
+    this.doorW = this.doorH / 1.5;
+ 
     // Header Prompt
     this.promptLabel = engine.spawn({
       id: 'prompt_label',
@@ -55,10 +55,10 @@ export default {
       fontSize: 36,
       color: '#880e4f',
       x: engine.width / 2,
-      y: 50,
+      y: Math.max(30, engine.height * 0.08),
       zIndex: 10
     });
-
+ 
     // Spawn Animal Sprite first (behind the door)
     this.animalBaseY = engine.height / 2;
     this.animalSprite = engine.spawn({
@@ -75,7 +75,7 @@ export default {
     const targetAnimalHeight = engine.height * 0.6;
     const animScale = targetAnimalHeight / 112; // Base animal asset is roughly 112px
     this.animalSprite.scale.set(animScale);
-
+ 
     // Spawn static door frame
     this.frameSprite = engine.spawn({
       id: 'door_frame',
@@ -87,7 +87,7 @@ export default {
     });
     this.frameSprite.width = this.doorW + 16;
     this.frameSprite.height = this.doorH + 16;
-
+ 
     // Spawn rotating door (Pivot set to left edge: anchor = [0, 0.5])
     this.doorSprite = engine.spawn({
       id: 'door_sprite',
@@ -103,7 +103,7 @@ export default {
     }
     this.doorSprite.width = this.doorW;
     this.doorSprite.height = this.doorH;
-
+ 
     // Giant toddler-forgiving tap hitarea covering the door frame
     const hitPadding = 40;
     this.doorSprite.hitArea = new PIXI.Rectangle(
@@ -112,7 +112,7 @@ export default {
       this.doorW + hitPadding * 2,
       this.doorH + hitPadding * 2
     );
-
+ 
     // Spawn tap hint label
     this.hintLabel = engine.spawn({
       id: 'hint_label',
@@ -120,10 +120,10 @@ export default {
       fontSize: 22,
       color: '#ad1457',
       x: engine.width / 2,
-      y: engine.height / 2 + this.doorH / 2 + 35,
+      y: engine.height / 2 + this.doorH / 2 + Math.max(15, engine.height * 0.05),
       zIndex: 10
     });
-
+ 
     // Create progress dots at bottom
     this.progressDots = [];
     const dotSpacing = 30;
@@ -133,38 +133,38 @@ export default {
         id: `dot_${i}`,
         asset: 'ui_dot_empty',
         x: startDotX + i * dotSpacing,
-        y: engine.height - 40,
+        y: engine.height - Math.max(25, engine.height * 0.06),
         scale: 0.8,
         zIndex: 10
       });
       this.progressDots.push(dot);
     }
-
+ 
     this.nameLabelBig = null;
   },
-
+ 
   update(engine, deltaTime) {
     // 1. Spring physics for door rotation (PAB-5: stiffness = 8.0, damping = 0.4)
     const targetAngle = (this.doorState === 'OPEN' || this.doorState === 'OPENING') ? -Math.PI * 0.75 : 0;
     const stiffness = 8.0;
     const damping = 0.4;
-
+ 
     this.angularVelocity += (targetAngle - this.doorAngle) * stiffness * deltaTime;
     this.angularVelocity *= (1 - damping);
     this.doorAngle += this.angularVelocity * deltaTime;
     this.doorSprite.rotation = this.doorAngle;
-
+ 
     // 2. Door state machine
     if (this.doorState === 'OPENING') {
       // Transition to OPEN when close enough
       if (Math.abs(this.doorAngle - targetAngle) < 0.02 && Math.abs(this.angularVelocity) < 0.05) {
         this.doorState = 'OPEN';
         this.openTimer = 2.5; // Stay open for 2.5 seconds
-
+ 
         // Play animal sound when fully opened
         const animal = this.animalQueue[this.currentAnimalIdx];
         engine.audio.play(animal.sound);
-
+ 
         // Bounce animal scale on reveal
         const targetAnimalHeight = engine.height * 0.6;
         const animScale = targetAnimalHeight / 112;
@@ -175,7 +175,7 @@ export default {
       // bob the animal (PAB-4: sin(time * 4) * 8)
       this.animalBobTime += deltaTime;
       this.animalSprite.y = this.animalBaseY + Math.sin(this.animalBobTime * 4) * 8;
-
+ 
       // Count down timer
       this.openTimer -= deltaTime;
       if (this.openTimer <= 0) {
@@ -194,28 +194,29 @@ export default {
         this.doorAngle = 0;
         this.doorSprite.rotation = 0;
         this.doorState = 'CLOSED';
-
+ 
         // Prepare next animal
         this._nextAnimal(engine);
       }
     }
-
+ 
     // 3. Animal alpha fade based on door rotation
     const openFraction = Math.min(1, Math.abs(this.doorAngle) / (Math.PI * 0.75));
     this.animalSprite.alpha = openFraction;
   },
-
+ 
   onEvent(engine, eventName, payload) {},
-
+ 
   onResize(engine) {
-    this.doorW = Math.min(220, engine.width * 0.35);
-    this.doorH = this.doorW * 1.5;
+    this.doorH = Math.min(300, Math.min(engine.height * 0.45, engine.width * 0.52));
+    this.doorW = this.doorH / 1.5;
     this.animalBaseY = engine.height / 2;
-
+ 
     if (this.promptLabel) {
       this.promptLabel.x = engine.width / 2;
+      this.promptLabel.y = Math.max(30, engine.height * 0.08);
     }
-
+ 
     if (this.animalSprite) {
       this.animalSprite.x = engine.width / 2;
       this.animalSprite.y = this.animalBaseY;
@@ -223,14 +224,14 @@ export default {
       const animScale = targetAnimalHeight / 112;
       this.animalSprite.scale.set(animScale);
     }
-
+ 
     if (this.frameSprite) {
       this.frameSprite.x = engine.width / 2;
       this.frameSprite.y = engine.height / 2;
       this.frameSprite.width = this.doorW + 16;
       this.frameSprite.height = this.doorH + 16;
     }
-
+ 
     if (this.doorSprite) {
       this.doorSprite.x = engine.width / 2 - this.doorW / 2;
       this.doorSprite.y = engine.height / 2;
@@ -244,24 +245,24 @@ export default {
         this.doorH + hitPadding * 2
       );
     }
-
+ 
     if (this.hintLabel) {
       this.hintLabel.x = engine.width / 2;
-      this.hintLabel.y = engine.height / 2 + this.doorH / 2 + 35;
+      this.hintLabel.y = engine.height / 2 + this.doorH / 2 + Math.max(15, engine.height * 0.05);
     }
-
+ 
     if (this.nameLabelBig) {
       this.nameLabelBig.x = engine.width / 2;
       this.nameLabelBig.y = engine.height * 0.82;
       this.nameLabelBig.style.fontSize = Math.max(48, engine.height * 0.1);
     }
-
+ 
     if (this.progressDots) {
       const dotSpacing = 30;
       const startDotX = engine.width / 2 - (ANIMAL_LIST.length - 1) * dotSpacing / 2;
       this.progressDots.forEach((dot, i) => {
         dot.x = startDotX + i * dotSpacing;
-        dot.y = engine.height - 40;
+        dot.y = engine.height - Math.max(25, engine.height * 0.06);
       });
     }
   },

@@ -38,17 +38,23 @@ export default {
 
     const COLS = 2;
     const ROWS = 3;
-    const padding = engine.width * 0.025;
-    const titleH = engine.height * 0.08;
-    const cellW = (engine.width - padding * (COLS + 1)) / COLS;
-    const cellH = (engine.height - titleH - padding * (ROWS + 1)) / ROWS;
+    const padding = Math.min(24, Math.min(engine.width, engine.height) * 0.03);
+    const titleH = Math.max(50, engine.height * 0.1);
+    const cellW = Math.min(260, (engine.width - padding * (COLS + 1)) / COLS);
+    const cellH = Math.min(180, (engine.height - titleH - padding * (ROWS + 1)) / ROWS);
+
+    const totalWidth = COLS * cellW + (COLS - 1) * padding;
+    const totalHeight = ROWS * cellH + (ROWS - 1) * padding;
+
+    const gridStartX = (engine.width - totalWidth) / 2;
+    const gridStartY = titleH + (engine.height - titleH - totalHeight) / 2;
 
     TILE_DATA.forEach((data, index) => {
       const col = index % COLS;
       const row = Math.floor(index / COLS);
 
-      const cellX = padding + col * (cellW + padding) + cellW / 2;
-      const cellY = titleH + padding + row * (cellH + padding) + cellH / 2;
+      const cellX = gridStartX + col * (cellW + padding) + cellW / 2;
+      const cellY = gridStartY + row * (cellH + padding) + cellH / 2;
 
       // SB-2: Spawn background panel as a container with direct PIXI.Graphics (no renderer.generateTexture)
       const panel = engine.spawn({
@@ -129,18 +135,24 @@ export default {
 
     const COLS = 2;
     const ROWS = 3;
-    const padding = engine.width * 0.025;
-    const titleH = engine.height * 0.08;
-    const cellW = (engine.width - padding * (COLS + 1)) / COLS;
-    const cellH = (engine.height - titleH - padding * (ROWS + 1)) / ROWS;
+    const padding = Math.min(24, Math.min(engine.width, engine.height) * 0.03);
+    const titleH = Math.max(50, engine.height * 0.1);
+    const cellW = Math.min(260, (engine.width - padding * (COLS + 1)) / COLS;
+    const cellH = Math.min(180, (engine.height - titleH - padding * (ROWS + 1)) / ROWS;
+
+    const totalWidth = COLS * cellW + (COLS - 1) * padding;
+    const totalHeight = ROWS * cellH + (ROWS - 1) * padding;
+
+    const gridStartX = (engine.width - totalWidth) / 2;
+    const gridStartY = titleH + (engine.height - titleH - totalHeight) / 2;
 
     if (this.tiles) {
       this.tiles.forEach((tile, index) => {
         const col = index % COLS;
         const row = Math.floor(index / COLS);
 
-        const cellX = padding + col * (cellW + padding) + cellW / 2;
-        const cellY = titleH + padding + row * (cellH + padding) + cellH / 2;
+        const cellX = gridStartX + col * (cellW + padding) + cellW / 2;
+        const cellY = gridStartY + row * (cellH + padding) + cellH / 2;
 
         if (tile.panel) {
           tile.panel.x = cellX;

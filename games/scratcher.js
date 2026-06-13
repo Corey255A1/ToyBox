@@ -171,7 +171,12 @@ export default {
     if (this.scratchBg) {
       this.scratchBg.x = engine.width / 2;
       this.scratchBg.y = engine.height / 2;
-      this.scratchBg.scale.set(Math.max(engine.width / 300, engine.height / 200));
+      if (this.revealSprite) {
+        this.scratchBg.width = this.revealSprite.width;
+        this.scratchBg.height = this.revealSprite.height;
+      } else {
+        this.scratchBg.scale.set(Math.max(engine.width / 300, engine.height / 200));
+      }
     }
 
     if (this.nameLabel) {
@@ -241,8 +246,9 @@ export default {
       y: engine.height / 2,
       zIndex: 2
     });
-    // scale to fit canvas
-    this.scratchBg.scale.set(Math.max(engine.width / 300, engine.height / 200));
+    // Scale scratchBg to match the revealSprite dimensions exactly
+    this.scratchBg.width = this.revealSprite.width;
+    this.scratchBg.height = this.revealSprite.height;
 
     // Grid tracking (10x8)
     this.gridCols = 10;

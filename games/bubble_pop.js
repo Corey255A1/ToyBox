@@ -34,6 +34,7 @@ export default {
     this.spawnInterval  = 0.9;
     this.spawnDelay     = 0;
     this._winTimer      = 0;
+    this.lastWidth      = engine.width;
 
     // Pick a random theme for this round
     const themes = Object.keys(THEME_DATA);
@@ -171,6 +172,16 @@ export default {
   onEvent(engine, eventName, payload) {},
 
   onResize(engine) {
+    const ratioX = engine.width / (this.lastWidth || engine.width);
+    this.lastWidth = engine.width;
+
+    if (this.bubbles) {
+      this.bubbles.forEach((b) => {
+        b._startX *= ratioX;
+        b.x *= ratioX;
+      });
+    }
+
     if (this.scoreLabel) {
       this.scoreLabel.x = engine.width / 2;
       this.scoreLabel.y = Math.max(35, engine.height * 0.08);

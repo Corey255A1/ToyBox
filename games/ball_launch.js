@@ -32,8 +32,9 @@ export default {
     this.isRoundEnd = false;
     this._winTimer = 0;
 
+    const titleH = Math.max(60, engine.height * 0.12);
     this.launcherX = 60;
-    this.launcherY = engine.height / 2;
+    this.launcherY = Math.max(titleH + 30, Math.min(engine.height - 70, engine.height / 2));
 
     this.isPreviewMode = (engine.app == null) || (engine.width < 250);
 
@@ -44,7 +45,7 @@ export default {
       fontSize: 38,
       color: '#ffffff',
       x: engine.width / 2,
-      y: 40,
+      y: Math.max(25, engine.height * 0.05),
       zIndex: 10
     });
     if (this.scoreLabel.style) {
@@ -79,7 +80,7 @@ export default {
       fontSize: 14,
       color: '#2c3e50',
       x: this.launcherX + 5,
-      y: 90,
+      y: titleH + 10,
       zIndex: 5
     });
     if (this.slidePrompt.style) {
@@ -217,7 +218,8 @@ export default {
       
       // If pointer is on the left side (cannon sliding range)
       if (x < 150) {
-        this.launcherY = Math.max(120, Math.min(engine.height - 130, y));
+        const titleH = Math.max(60, engine.height * 0.12);
+        this.launcherY = Math.max(titleH + 30, Math.min(engine.height - 70, y));
         this.launcherSprite.y = this.launcherY;
         if (this.ballState === 'IDLE') {
           this.ballY = this.launcherY;
@@ -230,16 +232,19 @@ export default {
   },
 
   onResize(engine) {
-    this.launcherY = Math.max(120, Math.min(engine.height - 130, this.launcherY));
+    const titleH = Math.max(60, engine.height * 0.12);
+    this.launcherY = Math.max(titleH + 30, Math.min(engine.height - 70, this.launcherY));
     this.launcherSprite.x = this.launcherX;
     this.launcherSprite.y = this.launcherY;
 
     if (this.scoreLabel) {
       this.scoreLabel.x = engine.width / 2;
+      this.scoreLabel.y = Math.max(25, engine.height * 0.05);
     }
 
     if (this.slidePrompt) {
       this.slidePrompt.x = this.launcherX + 5;
+      this.slidePrompt.y = titleH + 10;
     }
 
     const ballScale = (engine.width * 0.08) / 80;
@@ -253,10 +258,11 @@ export default {
       }
     }
 
-    // Resize targets
+    // Resize targets within safe play area bounds
+    const availableH = engine.height - titleH - 80;
     this.targets.forEach((t) => {
-      t.x = t.rx * engine.width;
-      t.y = 80 + t.ry * (engine.height - 230);
+      t.x = 160 + t.rx * (engine.width - 240);
+      t.y = titleH + t.ry * availableH;
       if (t.entity) {
         t.entity.x = t.x;
         t.entity.y = t.y;
@@ -267,9 +273,10 @@ export default {
   },
 
   _drawTrack(engine) {
+    const titleH = Math.max(60, engine.height * 0.12);
     this.trackGraphics.clear()
-      .moveTo(this.launcherX, 100)
-      .lineTo(this.launcherX, engine.height - 120)
+      .moveTo(this.launcherX, titleH + 20)
+      .lineTo(this.launcherX, engine.height - 60)
       .stroke({ color: 0x3e4a5e, width: 8, alpha: 0.4 });
   },
 
@@ -289,9 +296,12 @@ export default {
       { rx: 0.80, ry: 0.75, isHoop: true }
     ];
 
+    const titleH = Math.max(60, engine.height * 0.12);
+    const availableH = engine.height - titleH - 80;
+
     layout.forEach((node, i) => {
-      const x = node.rx * engine.width;
-      const y = 80 + node.ry * (engine.height - 230);
+      const x = 160 + node.rx * (engine.width - 240);
+      const y = titleH + node.ry * availableH;
 
       const entity = engine.spawn({
         id: `target_launch_${i}`,

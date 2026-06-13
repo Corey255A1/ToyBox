@@ -81,11 +81,11 @@ export default {
   },
 
   onEvent(engine, eventName, payload) {
-    if (eventName === 'touch_down') {
+    if (eventName === 'touch_down' || eventName === 'drag_start') {
       this._startDrag(payload, engine);
     } else if (eventName === 'touch_move') {
       this._continueDrag(payload, engine);
-    } else if (eventName === 'touch_up') {
+    } else if (eventName === 'touch_up' || eventName === 'drag_end') {
       this._endDrag(payload, engine);
     }
   },
@@ -95,9 +95,14 @@ export default {
       this.promptLabel.x = engine.width / 2;
     }
 
-    const slotSize = Math.min(100, engine.width * 0.14);
+    const slotSize = Math.max(70, Math.min(150, Math.min(engine.width * 0.15, engine.height * 0.15)));
     const spacingX = engine.width / ((this.totalPieces || 3) + 1);
-    const slotsY = engine.height * 0.35;
+    
+    const titleH = Math.max(60, engine.height * 0.12);
+    const availableH = engine.height - titleH;
+    const slotsY = titleH + availableH * 0.33;
+    this.trayH = Math.max(80, Math.min(180, availableH * 0.38));
+    const trayY = engine.height - this.trayH / 2 - 10;
 
     if (this.slots) {
       this.slots.forEach((slot, i) => {
@@ -124,15 +129,13 @@ export default {
       });
     }
 
-    this.trayH = engine.height * 0.28;
     if (this.traySprite) {
       this.traySprite.x = engine.width / 2;
-      this.traySprite.y = engine.height - this.trayH / 2 - 5;
+      this.traySprite.y = trayY;
       this.traySprite.width = engine.width - 20;
       this.traySprite.height = this.trayH;
     }
 
-    const trayY = engine.height - this.trayH / 2 - 5;
     if (this.pieces) {
       this.pieces.forEach((piece, i) => {
         piece.size = slotSize;
@@ -190,9 +193,12 @@ export default {
     }
 
     // Positions & Grid
-    const slotSize = Math.min(100, engine.width * 0.14);
+    const slotSize = Math.max(70, Math.min(150, Math.min(engine.width * 0.15, engine.height * 0.15)));
     const spacingX = engine.width / (this.totalPieces + 1);
-    const slotsY = engine.height * 0.35;
+    
+    const titleH = Math.max(60, engine.height * 0.12);
+    const availableH = engine.height - titleH;
+    const slotsY = titleH + availableH * 0.33;
 
     // 1. Spawn Silhouette slots
     this.slots = roundShapes.map((shape, i) => {
@@ -239,12 +245,13 @@ export default {
     });
 
     // 2. Spawn Tray background at bottom
-    this.trayH = engine.height * 0.28;
+    this.trayH = Math.max(80, Math.min(180, availableH * 0.38));
+    const trayY = engine.height - this.trayH / 2 - 10;
     this.traySprite = engine.spawn({
       id: 'tray_bg',
       asset: 'tray_bg',
       x: engine.width / 2,
-      y: engine.height - this.trayH / 2 - 5,
+      y: trayY,
       zIndex: 1
     });
     this.traySprite.width = engine.width - 20;
@@ -253,7 +260,6 @@ export default {
 
     // 3. Spawn draggable pieces (shuffled horizontally in the tray, SS-4: draw directly)
     const shuffledShapes = [...roundShapes].sort(() => Math.random() - 0.5);
-    const trayY = engine.height - this.trayH / 2 - 5;
 
     this.pieces = shuffledShapes.map((shape, i) => {
       const x = spacingX * (i + 1);

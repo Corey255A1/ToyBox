@@ -4,6 +4,45 @@
 
 const ANIMAL_IDS = ['cow', 'duck', 'frog', 'pig', 'cat', 'dog'];
 
+function applyCardScale(card, targetSize) {
+  const tex = card.texture;
+  if (!tex) return;
+
+  const getWidth = () => {
+    if (tex.source && tex.source.width > 1) return tex.source.width;
+    if (tex.width > 1) return tex.width;
+    return 0;
+  };
+
+  const getHeight = () => {
+    if (tex.source && tex.source.height > 1) return tex.source.height;
+    if (tex.height > 1) return tex.height;
+    return 0;
+  };
+
+  let w = getWidth();
+  let h = getHeight();
+
+  if (w <= 1 || h <= 1) {
+    if (card._assetName && card._assetName.startsWith('card_')) {
+      w = 2048;
+      h = 2048;
+    } else {
+      w = 64;
+      h = 64;
+    }
+
+    // Listen to update to scale again when loaded
+    tex.once('update', () => {
+      applyCardScale(card, targetSize);
+    });
+  }
+
+  const scale = targetSize / Math.max(w, h);
+  card.scale.set(scale);
+  card._baseScale = scale;
+}
+
 export default {
 
   config: {
@@ -19,15 +58,29 @@ export default {
     this.flippedCards = [];
     this.isLocked     = false;
 
-    // Calculate responsive card size and grid spacing relative to screen aspect ratio
-    const spacingX = (engine.width * 0.8) / 4;
-    const spacingY = (engine.height * 0.65) / 3; // Leaves room for top scoreboard
-    this.gridSpacing = Math.max(70, Math.min(150, Math.min(spacingX, spacingY)));
-    this.targetSize = this.gridSpacing * 0.85;
+    // Calculate responsive card size and grid spacing to maximize viewport usage
+    const sideMargin = Math.max(40, engine.width * 0.08);
+    const titleH = Math.max(60, engine.height * 0.15);
+    const bottomMargin = Math.max(40, engine.height * 0.08);
+
+    const availW = engine.width - 2 * sideMargin;
+    const availH = engine.height - titleH - bottomMargin;
+
+    // 4 columns, 3 rows.
+    // Total grid width = 4 * cardSize + 3 * gap
+    // Total grid height = 3 * cardSize + 2 * gap
+    // Let's use a gap of 12% of cardSize (0.12 * cardSize)
+    const cardSizeW = availW / 4.36;
+    const cardSizeH = availH / 3.24;
+
+    this.targetSize = Math.max(70, Math.min(cardSizeW, cardSizeH));
+    this.gridGap = this.targetSize * 0.12;
+    this.gridSpacing = this.targetSize + this.gridGap;
 
     // Centered alignment offsets
+    const gamingCenterY = titleH + availH / 2;
     this.gridStartX = engine.width / 2 - (this.gridSpacing * 1.5);
-    this.gridStartY = engine.height / 2 - (this.gridSpacing * 0.5);
+    this.gridStartY = gamingCenterY - this.gridSpacing;
 
     // Create a responsive score label
     this.scoreLabel = engine.spawn({
@@ -61,14 +114,8 @@ export default {
         },
       });
 
-      // Dynamically scale card based on its actual texture dimensions
-      if (card.texture && card.texture.width > 0) {
-        const scale = this.targetSize / Math.max(card.texture.width, card.texture.height);
-        card.scale.set(scale);
-        card._baseScale = scale;
-      } else {
-        card._baseScale = 1.0;
-      }
+      card._assetName = 'card_back';
+      applyCardScale(card, this.targetSize);
 
       card._animalId  = animalId;
       card._revealed  = false;
@@ -135,13 +182,23 @@ export default {
 
   onResize(engine) {
     // Re-calculate responsive card size and grid spacing on screen size changes
-    const spacingX = (engine.width * 0.8) / 4;
-    const spacingY = (engine.height * 0.65) / 3;
-    this.gridSpacing = Math.max(70, Math.min(150, Math.min(spacingX, spacingY)));
-    this.targetSize = this.gridSpacing * 0.85;
+    const sideMargin = Math.max(40, engine.width * 0.08);
+    const titleH = Math.max(60, engine.height * 0.15);
+    const bottomMargin = Math.max(40, engine.height * 0.08);
 
+    const availW = engine.width - 2 * sideMargin;
+    const availH = engine.height - titleH - bottomMargin;
+
+    const cardSizeW = availW / 4.36;
+    const cardSizeH = availH / 3.24;
+
+    this.targetSize = Math.max(70, Math.min(cardSizeW, cardSizeH));
+    this.gridGap = this.targetSize * 0.12;
+    this.gridSpacing = this.targetSize + this.gridGap;
+
+    const gamingCenterY = titleH + availH / 2;
     this.gridStartX = engine.width / 2 - (this.gridSpacing * 1.5);
-    this.gridStartY = engine.height / 2 - (this.gridSpacing * 0.5);
+    this.gridStartY = gamingCenterY - this.gridSpacing;
 
     // Reposition score label
     if (this.scoreLabel) {
@@ -159,11 +216,7 @@ export default {
         card.x = this.gridStartX + col * this.gridSpacing;
         card.y = this.gridStartY + row * this.gridSpacing;
 
-        if (card.texture && card.texture.width > 0) {
-          const scale = this.targetSize / Math.max(card.texture.width, card.texture.height);
-          card.scale.set(scale);
-          card._baseScale = scale;
-        }
+        applyCardScale(card, this.targetSize);
       });
     }
   },

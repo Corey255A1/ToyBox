@@ -154,7 +154,7 @@ export default {
   onEvent(engine, eventName, payload) {
     if (this.isPreviewMode || this.isTransitioning) return;
 
-    if (eventName === 'touch_move' || eventName === 'touch_down') {
+    if (eventName === 'touch_move' || eventName === 'touch_down' || eventName === 'drag_start') {
       this.lightX = payload.x;
       this.lightY = payload.y;
     }
@@ -175,14 +175,19 @@ export default {
 
     const sceneKey = this.sceneQueue ? this.sceneQueue[this.sceneIndex] : null;
     const scene = sceneKey ? SCENE_CONFIGS[sceneKey] : null;
-    const objScale = (engine.width * 0.12) / 80;
+    const scale = Math.max(engine.width / 1024, engine.height / 768);
+    const bgW = 1024 * scale;
+    const bgH = 768 * scale;
+    const bgLeft = engine.width / 2 - bgW / 2;
+    const bgTop = engine.height / 2 - bgH / 2;
+    const objScale = scale * 1.1;
 
     if (this.hiddenObjects && scene) {
       this.hiddenObjects.forEach((obj) => {
         const origObj = scene.objects.find(o => o.id === obj.id);
         if (origObj) {
-          const x = origObj.x * engine.width;
-          const y = 80 + origObj.y * (engine.height - 180);
+          const x = bgLeft + origObj.x * bgW;
+          const y = bgTop + origObj.y * bgH;
           obj.x = x;
           obj.y = y;
           obj.scale = objScale;
@@ -194,6 +199,7 @@ export default {
           if (obj.glow) {
             obj.glow.x = x;
             obj.glow.y = y;
+            obj.glow.scale.set(objScale * 0.7);
           }
         }
       });
@@ -204,7 +210,7 @@ export default {
       const startDotX = engine.width / 2 - (5 - 1) * dotSpacing / 2;
       this.progressDots.forEach((dot, i) => {
         dot.x = startDotX + i * dotSpacing;
-        dot.y = engine.height - 40;
+        dot.y = engine.height - Math.max(25, engine.height * 0.06);
       });
     }
   },
@@ -240,17 +246,24 @@ export default {
     });
     this.bgSprite.scale.set(Math.max(engine.width / 1024, engine.height / 768));
 
+    const scale = Math.max(engine.width / 1024, engine.height / 768);
+    const bgW = 1024 * scale;
+    const bgH = 768 * scale;
+    const bgLeft = engine.width / 2 - bgW / 2;
+    const bgTop = engine.height / 2 - bgH / 2;
+    const objScale = scale * 1.1;
+
     // 2. Hidden Objects Spawning
     this.hiddenObjects = scene.objects.map((obj, i) => {
-      const x = obj.x * engine.width;
-      const y = 80 + obj.y * (engine.height - 180);
+      const x = bgLeft + obj.x * bgW;
+      const y = bgTop + obj.y * bgH;
 
       // Glow behind object
       const glow = engine.spawn({
         id: `glow_${obj.id}`,
         asset: 'obj_glow',
         x, y,
-        scale: 0.7,
+        scale: objScale * 0.7,
         zIndex: 2
       });
       glow.visible = false;
@@ -261,13 +274,10 @@ export default {
         id: `obj_${obj.id}`,
         asset: obj.asset,
         x, y,
-        scale: 1,
+        scale: objScale,
         zIndex: 3
       });
       sprite.alpha = 0;
-      
-      const objScale = (engine.width * 0.12) / 80;
-      sprite.scale.set(objScale);
 
       return {
         id: obj.id,
@@ -291,7 +301,7 @@ export default {
         id: `dot_${i}`,
         asset: 'ui_dot_empty',
         x: startDotX + i * dotSpacing,
-        y: engine.height - 40,
+        y: engine.height - Math.max(25, engine.height * 0.06),
         scale: 0.7,
         zIndex: 15
       });
