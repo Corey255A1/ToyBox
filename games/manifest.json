@@ -5,7 +5,79 @@
     "description": "Flip and match pairs of cute animals!",
     "icon": "ui_icon_cow",
     "scriptPath": "games/memory_match.js",
-    "ageRange": "2-6",
+    "ageRange": "4-6",
     "tags": ["matching", "memory", "animals"]
+  },
+  {
+    "id": "bubble-pop",
+    "title": "Bubble Pop",
+    "description": "Pop floating bubbles to learn letters, numbers, and shapes!",
+    "icon": "bubble_blue",
+    "scriptPath": "games/bubble_pop.js",
+    "ageRange": "2-4",
+    "tags": ["popping", "colors", "counting", "educational"]
+  },
+  {
+    "id": "digital-coloring",
+    "title": "Digital Coloring",
+    "description": "Swipe to reveal beautiful, vibrant pre-colored scenes!",
+    "icon": "scene_lion",
+    "scriptPath": "games/digital_coloring.js",
+    "ageRange": "2-4",
+    "tags": ["painting", "reveal", "creative"]
+  },
+  {
+    "id": "peek-a-boo",
+    "title": "Peek-a-Boo",
+    "description": "Tap the bouncy doors to find who is hiding behind!",
+    "icon": "door_closed",
+    "scriptPath": "games/peek_a_boo.js",
+    "ageRange": "2-4",
+    "tags": ["discovery", "animals", "bouncy"]
+  },
+  {
+    "id": "scratcher",
+    "title": "Scratcher Card",
+    "description": "Scratch away the metallic surface to find hidden animal scenes!",
+    "icon": "scratch_surface",
+    "scriptPath": "games/scratcher.js",
+    "ageRange": "2-4",
+    "tags": ["scratch", "reveal", "interactive"]
+  },
+  {
+    "id": "ball-launch",
+    "title": "Ball Launch Physics",
+    "description": "Launch the ball and watch it pop balloons with magnet assist!",
+    "icon": "ball_main",
+    "scriptPath": "games/ball_launch.js",
+    "ageRange": "4-6",
+    "tags": ["physics", "launching", "action"]
+  },
+  {
+    "id": "sound-board",
+    "title": "Shape Sound Board",
+    "description": "Tap giant colorful shapes to hear funny animal and instrument sounds!",
+    "icon": "shape_circle",
+    "scriptPath": "games/sound_board.js",
+    "ageRange": "2-4",
+    "tags": ["sound", "shapes", "music"]
+  },
+  {
+    "id": "shape-sorter",
+    "title": "Shape Sorter Puzzle",
+    "description": "Match colored geometric shape pieces to their slot silhouettes!",
+    "icon": "piece_circle",
+    "scriptPath": "games/shape_sorter.js",
+    "ageRange": "4-6",
+    "tags": ["matching", "sorting", "shapes"]
+  },
+  {
+    "id": "flashlight",
+    "title": "Flashlight Finder",
+    "description": "Move the flashlight beam in the dark to find hidden animals!",
+    "icon": "bg_jungle",
+    "scriptPath": "games/flashlight.js",
+    "ageRange": "4-6",
+    "tags": ["dark", "discovery", "animals"]
   }
 ]

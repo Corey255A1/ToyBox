@@ -255,31 +255,175 @@ function buildCanvas2DMiniEngine(canvas) {
         ctx.rotate(e.angle * Math.PI / 180);
         ctx.scale(e.scale, e.scale);
 
+        const color = e.color || '#e94560';
+
         if (e.text) {
-          ctx.fillStyle = e.color;
+          ctx.fillStyle = color;
           ctx.font      = `bold 14px Nunito, sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(e.text, 0, 0);
         } else if (e.asset) {
-          // Asset placeholder block
-          ctx.fillStyle = e.color || '#e94560';
-          // Draw a card back shape with a design
-          ctx.fillRect(-16, -24, 32, 48);
+          const key = e.asset;
+          ctx.fillStyle = color;
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(-12, -20, 24, 40);
-          ctx.fillStyle = '#ffffff';
-          ctx.beginPath();
-          ctx.arc(0, 0, 4, 0, Math.PI * 2);
-          ctx.fill();
+
+          if (key.includes('bubble')) {
+            // Draw beautiful translucent bubble
+            ctx.beginPath();
+            ctx.arc(0, 0, 18, 0, Math.PI * 2);
+            ctx.fillStyle = hexToRgba(color, 0.65);
+            ctx.fill();
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            // Highlight
+            ctx.beginPath();
+            ctx.arc(-5, -5, 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.fill();
+          } else if (key.includes('star')) {
+            // Draw star
+            draw2DStar(ctx, 0, 0, 5, 18, 8, color);
+          } else if (key.includes('balloon')) {
+            // Draw balloon
+            ctx.beginPath();
+            ctx.ellipse(0, -4, 12, 16, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            // string
+            ctx.beginPath();
+            ctx.moveTo(0, 12);
+            ctx.lineTo(0, 24);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.stroke();
+          } else if (key.includes('door_closed')) {
+            // Draw door
+            ctx.fillRect(-15, -25, 30, 50);
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-15, -25, 30, 50);
+            // Knob
+            ctx.beginPath();
+            ctx.arc(8, 2, 2.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffd700';
+            ctx.fill();
+          } else if (key.includes('door_frame')) {
+            ctx.lineWidth = 4;
+            ctx.strokeRect(-18, -28, 36, 56);
+          } else if (key.includes('ball')) {
+            ctx.beginPath();
+            ctx.arc(0, 0, 16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          } else if (key.startsWith('piece_') || key.startsWith('shape_') || key.startsWith('slot_')) {
+            const isSlot = key.startsWith('slot_') && !key.includes('glow');
+            const shapeType = key.replace('piece_', '').replace('slot_', '').replace('shape_', '');
+            draw2DShape(ctx, shapeType, color, isSlot);
+          } else if (key.startsWith('animal_') || key.startsWith('obj_')) {
+            ctx.beginPath();
+            ctx.arc(0, 0, 18, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            // Draw label character inside
+            const name = key.replace('animal_', '').replace('obj_', '').toUpperCase();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 10px Nunito, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(name.substring(0, 2), 0, 0);
+          } else {
+            // Card back or general block
+            ctx.fillRect(-16, -24, 32, 48);
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(-12, -20, 24, 40);
+          }
         } else {
-          // Draw generic colored block
-          ctx.fillStyle = e.color || '#e94560';
+          ctx.fillStyle = color;
           ctx.fillRect(-12, -12, 24, 24);
         }
         ctx.restore();
       }
     },
   };
+}
+
+function hexToRgba(hex, alpha) {
+  let c = hex.replace('#', '');
+  if (c.length === 3) {
+    c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+  }
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function draw2DStar(ctx, cx, cy, spikes, outerRadius, innerRadius, color) {
+  let rot = Math.PI / 2 * 3;
+  let x = cx;
+  let y = cy;
+  const step = Math.PI / spikes;
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - outerRadius);
+  for (let i = 0; i < spikes; i++) {
+    x = cx + Math.cos(rot) * outerRadius;
+    y = cy + Math.sin(rot) * outerRadius;
+    ctx.lineTo(x, y);
+    rot += step;
+
+    x = cx + Math.cos(rot) * innerRadius;
+    y = cy + Math.sin(rot) * innerRadius;
+    ctx.lineTo(x, y);
+    rot += step;
+  }
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function draw2DShape(ctx, type, color, isSlot) {
+  const size = 16;
+  ctx.beginPath();
+  if (type === 'circle') {
+    ctx.arc(0, 0, size, 0, Math.PI * 2);
+  } else if (type === 'square') {
+    ctx.rect(-size, -size, size * 2, size * 2);
+  } else if (type === 'triangle') {
+    ctx.moveTo(0, -size);
+    ctx.lineTo(size, size);
+    ctx.lineTo(-size, size);
+    ctx.closePath();
+  } else if (type === 'star') {
+    draw2DStar(ctx, 0, 0, 5, size * 1.1, size * 0.5, color);
+    return;
+  } else if (type === 'heart') {
+    ctx.moveTo(0, -size * 0.4);
+    ctx.bezierCurveTo(-size * 0.8, -size * 1.2, -size * 1.6, -size * 0.4, 0, size * 0.8);
+    ctx.bezierCurveTo(size * 1.6, -size * 0.4, size * 0.8, -size * 1.2, 0, -size * 0.4);
+  } else if (type === 'diamond') {
+    ctx.moveTo(0, -size * 1.2);
+    ctx.lineTo(size, 0);
+    ctx.lineTo(0, size * 1.2);
+    ctx.lineTo(-size, 0);
+    ctx.closePath();
+  } else if (type === 'oval') {
+    ctx.ellipse(0, 0, size * 1.3, size * 0.8, 0, 0, Math.PI * 2);
+  } else if (type === 'cross') {
+    const w = size * 0.4;
+    const h = size * 1.2;
+    ctx.rect(-w, -h, w * 2, h * 2);
+    ctx.rect(-h, -w, h * 2, w * 2);
+  } else {
+    ctx.arc(0, 0, size, 0, Math.PI * 2);
+  }
+
+  if (isSlot) {
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
 }
