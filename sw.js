@@ -1,6 +1,6 @@
 // sw.js
 
-const CACHE_VERSION = 'toybox-v1';
+const CACHE_VERSION = 'toybox-v2';
 
 const PRECACHE_URLS = [
   '/',

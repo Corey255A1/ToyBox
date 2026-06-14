@@ -40,7 +40,7 @@ export async function initRuntime(canvas) {
   return app;
 }
 
-function resizeRenderer() {
+export function resizeRenderer() {
   if (!app) return;
 
   const width  = window.innerWidth;
@@ -59,8 +59,8 @@ function resizeRenderer() {
  * This is the API that every game module receives.
  */
 export function buildEngineObject() {
-  const width = app ? app.renderer.width / app.renderer.resolution : window.innerWidth;
-  const height = app ? app.renderer.height / app.renderer.resolution : window.innerHeight;
+  const width = app ? app.screen.width : window.innerWidth;
+  const height = app ? app.screen.height : window.innerHeight;
 
   return {
     width,
@@ -76,8 +76,8 @@ export function buildEngineObject() {
       if (app) {
         app.renderer.render({
           container: displayObject,
-          renderTexture: renderTexture,
-          clear: clear
+          target:    renderTexture,
+          clear:     clear
         });
       }
     },
@@ -245,8 +245,8 @@ function spawnEntity(options) {
 
   if (entity.anchor) entity.anchor.set(0.5);
 
-  entity.x      = options.x     ?? (app.renderer.width  / app.renderer.resolution / 2);
-  entity.y      = options.y     ?? (app.renderer.height / app.renderer.resolution / 2);
+  entity.x      = options.x     ?? (app ? app.screen.width / 2 : window.innerWidth / 2);
+  entity.y      = options.y     ?? (app ? app.screen.height / 2 : window.innerHeight / 2);
   entity.scale.set(options.scale ?? 1);
   entity.alpha  = options.alpha ?? 1;
   entity.angle  = options.angle ?? 0;
@@ -430,6 +430,9 @@ export function startGameLoop(gameModule, gameId, onExit) {
   currentGame = gameModule.default || gameModule;
   currentGameId = gameId;
   onExitCallback = onExit;
+
+  // Force layout update on startup when game screen becomes active
+  resizeRenderer();
 
   app.ticker.add(tickerCallback);
   app.ticker.start();

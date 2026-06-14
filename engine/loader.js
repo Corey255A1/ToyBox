@@ -1,6 +1,6 @@
 // engine/loader.js
 
-import { initRuntime, startGameLoop, preloadGameAssets, stopGameLoop, buildEngineObject }
+import { initRuntime, startGameLoop, preloadGameAssets, stopGameLoop, buildEngineObject, resizeRenderer }
   from './engine.js';
 import { sideloaded } from './storage.js';
 import { configureInput } from './input.js';
@@ -43,6 +43,9 @@ export async function loadGame(gameEntry, options = {}) {
     // 6. Initialize (or reuse) the PixiJS runtime
     const canvas = document.getElementById('game-canvas');
     const app    = await initRuntime(canvas);
+
+    // Ensure the renderer is resized to current window dimensions before game init
+    resizeRenderer();
 
     // 7. Apply game config to the runtime
     applyGameConfig(config, app);

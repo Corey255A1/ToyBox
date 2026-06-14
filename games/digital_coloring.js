@@ -91,65 +91,66 @@ export default {
   },
 
   update(engine, deltaTime) {
+    // Drawing is now fully event-driven inside onEvent, so update is a no-op!
+  },
+
+  onEvent(engine, eventName, payload) {
     if (this.isPreviewMode || !this.canvasTexture) return;
 
-    // Handle Multi-touch drawing
-    const currentTouches = engine.input.touches || [];
-    const activeIds = new Set();
-    const barH = this.isMobile ? 180 : 240;
+    const barH = this.isMobile ? 120 : 160;
+    const barY = engine.height - barH / 2;
+    const topOfUI = barY - barH / 2;
 
-    currentTouches.forEach((touch) => {
-      // Ignore touches that land on the bottom UI area
-      if (touch.y > engine.height - barH) {
+    if (eventName === 'drag_start' || eventName === 'touch_down') {
+      const { x, y, id } = payload;
+      // Ignore drawing touches that land inside the bottom UI box
+      if (y > topOfUI) return;
+
+      this.touchColors[id] = this.currentTool === 'eraser' ? 0xffffff : this.currentColorHex;
+      this.touchTools[id] = this.currentTool;
+      this.lastPositions[id] = { x, y };
+
+      // Draw initial touch dot
+      const width = this.touchTools[id] === 'eraser' ? this.brushSize * 2.5 : this.brushSize;
+      this.brushGraphics.clear()
+        .circle(x, y, width / 2)
+        .fill(this.touchTools[id] === 'eraser' ? 0xffffff : this.touchColors[id]);
+
+      engine.renderToTexture(this.brushGraphics, this.canvasTexture, false);
+    } else if (eventName === 'touch_move') {
+      const { x, y, id } = payload;
+      if (!this.lastPositions[id]) return;
+
+      // If dragged into the UI box, cancel drawing for this pointer
+      if (y > topOfUI) {
+        delete this.lastPositions[id];
         return;
       }
 
-      activeIds.add(touch.id);
-
-      // Initialize touch color and tool on pointerdown (first frame of touch)
-      if (!this.touchColors[touch.id]) {
-        this.touchColors[touch.id] = this.currentTool === 'eraser' ? 0xffffff : this.currentColorHex;
-        this.touchTools[touch.id] = this.currentTool;
-      }
-
-      const prev = this.lastPositions[touch.id];
-      const color = this.touchColors[touch.id];
-      const tool = this.touchTools[touch.id];
+      const prev = this.lastPositions[id];
+      const color = this.touchColors[id];
+      const tool = this.touchTools[id];
       const width = tool === 'eraser' ? this.brushSize * 2.5 : this.brushSize;
 
       this.brushGraphics.clear();
-
-      if (prev) {
-        // Draw smooth line segment on graphics and render to texture
-        this.brushGraphics.moveTo(prev.x, prev.y)
-          .lineTo(touch.x, touch.y)
-          .stroke({
-            color: tool === 'eraser' ? 0xffffff : color,
-            width: width,
-            cap: 'round',
-            join: 'round'
-          });
-      } else {
-        // Draw initial touch dot
-        this.brushGraphics.circle(touch.x, touch.y, width / 2)
-          .fill(tool === 'eraser' ? 0xffffff : color);
-      }
+      this.brushGraphics.moveTo(prev.x, prev.y)
+        .lineTo(x, y)
+        .stroke({
+          color: tool === 'eraser' ? 0xffffff : color,
+          width: width,
+          cap: 'round',
+          join: 'round'
+        });
 
       engine.renderToTexture(this.brushGraphics, this.canvasTexture, false);
-      this.lastPositions[touch.id] = { x: touch.x, y: touch.y };
-    });
-
-    // Remove touches that are no longer active
-    for (const id in this.lastPositions) {
-      if (!activeIds.has(Number(id))) {
-        delete this.lastPositions[id];
-        delete this.touchColors[id];
-        delete this.touchTools[id];
-      }
+      this.lastPositions[id] = { x, y };
+    } else if (eventName === 'drag_end' || eventName === 'touch_up') {
+      const { id } = payload;
+      delete this.lastPositions[id];
+      delete this.touchColors[id];
+      delete this.touchTools[id];
     }
   },
-
-  onEvent(engine, eventName, payload) {},
 
   onResize(engine) {
     this.isMobile = engine.width < 600;
@@ -273,25 +274,39 @@ export default {
   },
 
   _repositionUI(engine) {
-    const barH = this.isMobile ? 180 : 240; // tall space on desktop
-    const barY = engine.height - barH;
+    const barH = this.isMobile ? 120 : 160;
+    const barY = engine.height - barH / 2;
+    const uiBoxW = engine.width;
 
-    // Draw main toolbar background
-    this.toolbarGraphics.clear();
-    this.toolbarGraphics.rect(0, 0, engine.width, barH).fill(0xf4ebe1).stroke({ color: 0xdfd5c6, width: 4 });
-    this.toolbarBg.x = 0;
+    // Position of toolbar background container (centered horizontally)
+    this.toolbarBg.x = engine.width / 2;
     this.toolbarBg.y = barY;
 
-    // Spacing and sizing calculations for toddler usability
-    const swatchR = this.isMobile ? 26 : 38; // extremely large circles for toddlers
-    const toolW = this.isMobile ? 110 : 180;
-    const toolH = this.isMobile ? 55 : 80;
+    // Draw main toolbar background box to fill the whole width (dock style)
+    this.toolbarGraphics.clear();
+    // Drop shadow
+    this.toolbarGraphics.rect(-uiBoxW / 2, -barH / 2, uiBoxW, barH)
+                         .fill({ color: 0x000000, alpha: 0.1 });
+    // Warm soft pastel beige background
+    this.toolbarGraphics.rect(-uiBoxW / 2, -barH / 2, uiBoxW, barH)
+                         .fill(0xf5ebe0);
+    // Nice light wood-like top border line
+    this.toolbarGraphics.rect(-uiBoxW / 2, -barH / 2, uiBoxW, 4)
+                         .fill(0xd7ccc8);
 
-    // Row 1 Y (Colors)
-    const row1Y = barY + (this.isMobile ? 45 : 65);
-    const swatchSpacing = engine.width / COLORS.length;
+    // Spacing and sizing calculations for toddler usability
+    this.swatchR = this.isMobile ? 22 : 30;
+    const swatchR = this.swatchR;
+    const toolW = this.isMobile ? 100 : 150;
+    const toolH = this.isMobile ? 42 : 58;
+
+    // Row 1 Y (Colors) centered inside the UI box, leaving tight padding
+    const row1Y = barY - barH * 0.22;
+    const swatchSpacing = Math.min(swatchR * 2.6, (uiBoxW - swatchR * 3) / (COLORS.length - 1 || 1));
+    const swatchesStartX = engine.width / 2 - ((COLORS.length - 1) * swatchSpacing) / 2;
+
     this.colorButtons.forEach((btn, i) => {
-      btn.x = swatchSpacing * i + swatchSpacing / 2;
+      btn.x = swatchesStartX + i * swatchSpacing;
       btn.y = row1Y;
       btn._swatchG.clear()
         .circle(0, 0, swatchR)
@@ -301,65 +316,66 @@ export default {
       btn.hitArea = new PIXI.Circle(0, 0, swatchR * 1.4);
     });
 
-    // Row 2 Y (Tools)
-    const row2Y = barY + (this.isMobile ? 125 : 165);
+    // Row 2 Y (Tools) centered inside the UI box, leaving tight padding
+    const row2Y = barY + barH * 0.22;
     const numTools = 3;
-    const toolSpacing = engine.width / (numTools + 1);
+    const toolSpacing = Math.min(toolW * 1.25, (uiBoxW - toolW * 1.5) / 2);
+    const toolsStartX = engine.width / 2 - (2 * toolSpacing) / 2;
 
-    this.btnBrush.x = toolSpacing * 1;
+    this.btnBrush.x = toolsStartX + 0 * toolSpacing;
     this.btnBrush.y = row2Y;
     this.btnBrushGraphics.clear()
-      .roundRect(-toolW/2, -toolH/2, toolW, toolH, 16)
+      .roundRect(-toolW/2, -toolH/2, toolW, toolH, 12)
       .fill(0xffffff)
-      .stroke({ color: 0x4a3728, width: 4 });
+      .stroke({ color: 0x8d6e63, width: 3 });
     this.btnBrush.hitArea = new PIXI.Rectangle(-toolW/2, -toolH/2, toolW, toolH);
 
     // Text label
     if (this.btnBrushText) this.btnBrush.removeChild(this.btnBrushText);
     this.btnBrushText = new PIXI.Text({
       text: '🖌 Paint',
-      style: new PIXI.TextStyle({ fontSize: this.isMobile ? 18 : 24, fill: '#4a3728', fontWeight: 'bold' })
+      style: new PIXI.TextStyle({ fontSize: this.isMobile ? 14 : 20, fill: '#4a3728', fontWeight: 'bold' })
     });
     this.btnBrushText.anchor.set(0.5);
     this.btnBrush.addChild(this.btnBrushText);
 
-    this.btnEraser.x = toolSpacing * 2;
+    this.btnEraser.x = toolsStartX + 1 * toolSpacing;
     this.btnEraser.y = row2Y;
     this.btnEraserGraphics.clear()
-      .roundRect(-toolW/2, -toolH/2, toolW, toolH, 16)
+      .roundRect(-toolW/2, -toolH/2, toolW, toolH, 12)
       .fill(0xffffff)
-      .stroke({ color: 0x4a3728, width: 4 });
+      .stroke({ color: 0x8d6e63, width: 3 });
     this.btnEraser.hitArea = new PIXI.Rectangle(-toolW/2, -toolH/2, toolW, toolH);
 
     // Text label
     if (this.btnEraserText) this.btnEraser.removeChild(this.btnEraserText);
     this.btnEraserText = new PIXI.Text({
       text: '🧽 Eraser',
-      style: new PIXI.TextStyle({ fontSize: this.isMobile ? 18 : 24, fill: '#4a3728', fontWeight: 'bold' })
+      style: new PIXI.TextStyle({ fontSize: this.isMobile ? 14 : 20, fill: '#4a3728', fontWeight: 'bold' })
     });
     this.btnEraserText.anchor.set(0.5);
     this.btnEraser.addChild(this.btnEraserText);
 
-    this.btnClear.x = toolSpacing * 3;
+    this.btnClear.x = toolsStartX + 2 * toolSpacing;
     this.btnClear.y = row2Y;
     this.btnClearGraphics.clear()
-      .roundRect(-toolW/2, -toolH/2, toolW, toolH, 16)
+      .roundRect(-toolW/2, -toolH/2, toolW, toolH, 12)
       .fill(0xffe5e5)
-      .stroke({ color: 0xd32f2f, width: 4 });
+      .stroke({ color: 0xd32f2f, width: 3 });
     this.btnClear.hitArea = new PIXI.Rectangle(-toolW/2, -toolH/2, toolW, toolH);
 
     // Text label
     if (this.btnClearText) this.btnClear.removeChild(this.btnClearText);
     this.btnClearText = new PIXI.Text({
       text: '🗑 Clear',
-      style: new PIXI.TextStyle({ fontSize: this.isMobile ? 18 : 24, fill: '#d32f2f', fontWeight: 'bold' })
+      style: new PIXI.TextStyle({ fontSize: this.isMobile ? 14 : 20, fill: '#d32f2f', fontWeight: 'bold' })
     });
     this.btnClearText.anchor.set(0.5);
     this.btnClear.addChild(this.btnClearText);
   },
 
   _updateUIHighlighting() {
-    const swatchR = this.isMobile ? 26 : 38;
+    const swatchR = this.swatchR || (this.isMobile ? 24 : 32);
 
     this.btnBrush.scale.set(this.currentTool === 'brush' ? 1.12 : 1.0);
     this.btnEraser.scale.set(this.currentTool === 'eraser' ? 1.12 : 1.0);
@@ -370,7 +386,7 @@ export default {
       btn._swatchG.clear()
         .circle(0, 0, swatchR)
         .fill(btn._colorHex)
-        .stroke({ color: isActive ? 0x000000 : 0xffffff, width: isActive ? 5 : 3 });
+        .stroke({ color: isActive ? 0x2e1c0c : 0xffffff, width: isActive ? 5 : 3 });
       btn.scale.set(isActive ? 1.15 : 1.0);
     });
   },
@@ -378,6 +394,9 @@ export default {
   _selectTool(tool) {
     this.currentTool = tool;
     this._updateUIHighlighting();
+    const btn = tool === 'brush' ? this.btnBrush : this.btnEraser;
+    this.engine.animate(btn, { scale: 1.25 }, 0.08, 'easeOut')
+      .then(() => this.engine.animate(btn, { scale: 1.12 }, 0.08, 'bounce'));
   },
 
   _selectColor(colorHex) {
@@ -386,6 +405,12 @@ export default {
       this.currentTool = 'brush';
     }
     this._updateUIHighlighting();
+    
+    const btn = this.colorButtons.find(b => b._colorHex === colorHex);
+    if (btn) {
+      this.engine.animate(btn, { scale: 1.3 }, 0.08, 'easeOut')
+        .then(() => this.engine.animate(btn, { scale: 1.15 }, 0.08, 'bounce'));
+    }
   },
 
   _clearCanvas() {
@@ -394,9 +419,9 @@ export default {
       this.engine.renderToTexture(emptyG, this.canvasTexture, true);
       emptyG.destroy();
     }
-    // Bounce clear button
-    this.btnClear.scale.set(0.9);
-    setTimeout(() => this.btnClear.scale.set(1.0), 100);
+    // Bounce clear button safely
+    this.engine.animate(this.btnClear, { scale: 0.9 }, 0.08, 'easeOut')
+      .then(() => this.engine.animate(this.btnClear, { scale: 1.0 }, 0.08, 'bounce'));
   },
 
   preview(miniEngine) {
