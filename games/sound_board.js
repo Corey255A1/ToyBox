@@ -137,8 +137,8 @@ export default {
     const ROWS = 3;
     const padding = Math.min(24, Math.min(engine.width, engine.height) * 0.03);
     const titleH = Math.max(50, engine.height * 0.1);
-    const cellW = Math.min(260, (engine.width - padding * (COLS + 1)) / COLS;
-    const cellH = Math.min(180, (engine.height - titleH - padding * (ROWS + 1)) / ROWS;
+    const cellW = Math.min(260, (engine.width - padding * (COLS + 1)) / COLS);
+    const cellH = Math.min(180, (engine.height - titleH - padding * (ROWS + 1)) / ROWS);
 
     const totalWidth = COLS * cellW + (COLS - 1) * padding;
     const totalHeight = ROWS * cellH + (ROWS - 1) * padding;

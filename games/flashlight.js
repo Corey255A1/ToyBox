@@ -96,9 +96,9 @@ export default {
     this.glowPulsate += deltaTime * 4;
 
     // 1. Redraw darkness overlay with cutout hole
-    if (this.darkness && !this.isPreviewMode) {
-      this.darkness.clear();
-      this.darkness.rect(0, 0, engine.width, engine.height).fill({ color: 0x070714, alpha: this.darknessAlpha });
+    if (this.darknessGraphics && !this.isPreviewMode) {
+      this.darknessGraphics.clear();
+      this.darknessGraphics.rect(0, 0, engine.width, engine.height).fill({ color: 0x070714, alpha: this.darknessAlpha });
       
       // Draw penumbra erase circles (FL-1: gradual center to edge penumbra)
       if (this.darknessAlpha > 0) {
@@ -319,13 +319,16 @@ export default {
         y: 0,
         zIndex: 8
       });
-      this.darkness.clear();
-      this.darkness.rect(0, 0, engine.width, engine.height).fill({ color: 0x070714, alpha: this.darknessAlpha });
+      
+      this.darknessGraphics = new PIXI.Graphics();
+      this.darkness.addChild(this.darknessGraphics);
 
-      // Hole Graphics added as child of darkness with ERASE blendMode
+      this.darknessGraphics.rect(0, 0, engine.width, engine.height).fill({ color: 0x070714, alpha: this.darknessAlpha });
+
+      // Hole Graphics added as child of darknessGraphics with ERASE blendMode
       this.hole = new PIXI.Graphics();
       this.hole.blendMode = 'erase';
-      this.darkness.addChild(this.hole);
+      this.darknessGraphics.addChild(this.hole);
     }
   },
 
