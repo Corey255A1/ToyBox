@@ -62,6 +62,10 @@ export default {
   },
 
   init(engine) {
+    if (this.moteEntities) {
+      this.moteEntities.forEach(m => engine.destroy(m));
+    }
+
     this.sceneIndex = 0;
     this.sceneQueue = Object.keys(SCENE_CONFIGS).sort(() => Math.random() - 0.5);
     this.beamRadius = Math.max(80, Math.min(220, engine.width * 0.18));
@@ -88,6 +92,25 @@ export default {
       this.promptLabel.style.strokeThickness = 4;
     }
 
+    // Spawn ambient glittering motes
+    this.moteEntities = [];
+    for (let i = 0; i < 22; i++) {
+      const mote = engine.spawn({
+        id: `mote_${i}_${Date.now()}`,
+        asset: 'particle_sparkle',
+        x: Math.random() * engine.width,
+        y: Math.random() * engine.height,
+        scale: 0.15 + Math.random() * 0.25,
+        zIndex: 5
+      });
+      mote.alpha = 0; // invisible in dark
+      mote._vx = (Math.random() - 0.5) * 16;
+      mote._vy = (Math.random() - 0.5) * 16;
+      mote._phase = Math.random() * Math.PI * 2;
+      mote._phaseSpeed = 1.0 + Math.random() * 1.5;
+      this.moteEntities.push(mote);
+    }
+
     this._loadScene(engine);
   },
 
@@ -102,6 +125,37 @@ export default {
       const touch = engine.input.touches[0];
       this.lightX = touch.x;
       this.lightY = touch.y;
+    }
+
+    // Move ambient dust motes / fireflies
+    if (this.moteEntities) {
+      this.moteEntities.forEach((m) => {
+        m.x += m._vx * deltaTime;
+        m.y += m._vy * deltaTime;
+        m._phase += m._phaseSpeed * deltaTime;
+        
+        // Wrap around screen
+        if (m.x < -20) m.x = engine.width + 20;
+        if (m.x > engine.width + 20) m.x = -20;
+        if (m.y < -20) m.y = engine.height + 20;
+        if (m.y > engine.height + 20) m.y = -20;
+
+        // If flashlight is pressed, fade in motes that are inside the beam!
+        if (this.isPressed) {
+          const dx = m.x - this.lightX;
+          const dy = m.y - this.lightY;
+          const dist = Math.hypot(dx, dy);
+          if (dist < this.beamRadius) {
+            // inside beam: show with a subtle glow oscillate
+            const targetAlpha = (1.0 - dist / this.beamRadius) * (0.35 + 0.35 * Math.sin(m._phase));
+            m.alpha += (targetAlpha - m.alpha) * 0.15;
+          } else {
+            m.alpha += (0 - m.alpha) * 0.15;
+          }
+        } else {
+          m.alpha += (0 - m.alpha) * 0.15;
+        }
+      });
     }
 
     // 1. Redraw darkness overlay with cutout hole

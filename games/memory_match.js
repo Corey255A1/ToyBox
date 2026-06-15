@@ -54,6 +54,8 @@ export default {
   },
 
   init(engine) {
+    if (this.bgGraphic) engine.destroy(this.bgGraphic);
+
     this.score        = 0;
     this.flippedCards = [];
     this.isLocked     = false;
@@ -121,12 +123,53 @@ export default {
       card._revealed  = false;
       return card;
     });
+
+    // 0. Setup tech gradient background (zIndex 0)
+    this.bgGraphic = engine.spawn({
+      id: 'memory_bg',
+      x: 0,
+      y: 0,
+      zIndex: 0
+    });
+    this.bgGraphicsDraw = new PIXI.Graphics();
+    this.bgGraphic.addChild(this.bgGraphicsDraw);
+    this._drawBackground(engine);
+  },
+
+  _drawBackground(engine) {
+    if (!this.bgGraphicsDraw) return;
+    this.bgGraphicsDraw.clear();
+    
+    // Deeper cosmic purple-blue gradient
+    const steps = 12;
+    const stepH = engine.height / steps;
+    for (let i = 0; i < steps; i++) {
+      const ratio = i / (steps - 1);
+      const r = Math.floor(0x11 + (0x07 - 0x11) * ratio);
+      const g = Math.floor(0x1e + (0x0a - 0x1e) * ratio);
+      const b = Math.floor(0x3e + (0x1b - 0x3e) * ratio);
+      const hexColor = (r << 16) | (g << 8) | b;
+      this.bgGraphicsDraw.rect(0, i * stepH, engine.width, stepH + 1).fill(hexColor);
+    }
+    
+    // Draw subtle digital tech grid lines
+    const size = 60;
+    for (let x = 0; x < engine.width; x += size) {
+      this.bgGraphicsDraw.rect(x, 0, 1, engine.height).fill({ color: 0xffffff, alpha: 0.04 });
+    }
+    for (let y = 0; y < engine.height; y += size) {
+      this.bgGraphicsDraw.rect(0, y, engine.width, 1).fill({ color: 0xffffff, alpha: 0.04 });
+    }
   },
 
   update(engine, deltaTime) {
     if (this.score >= ANIMAL_IDS.length) {
       this.score = 0; // Prevent duplicate triggers
       engine.audio.play('win_jingle');
+      
+      // Clean up background graphics
+      if (this.bgGraphic) engine.destroy(this.bgGraphic);
+
       engine.system.triggerWinState({
         title: 'YOU MATCHED THEM ALL!',
         message: 'Fantastic memory!',
@@ -138,6 +181,28 @@ export default {
           engine.system.exit();
         }
       });
+    }
+  },
+
+  _burstSparkles(x, y, engine) {
+    const colors = [0xffd700, 0xffeb3b, 0xffffff];
+    for (let i = 0; i < 8; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 50 + Math.random() * 80;
+      const s = engine.spawn({
+        id: `match_sparkle_${Date.now()}_${Math.random()}`,
+        asset: 'ui_star',
+        x, y,
+        scale: 0.15 + Math.random() * 0.2,
+        zIndex: 12
+      });
+      s.tint = colors[Math.floor(Math.random() * colors.length)];
+      engine.animate(s, {
+        x: x + Math.cos(angle) * speed,
+        y: y + Math.sin(angle) * speed,
+        alpha: 0,
+        angle: 180
+      }, 0.6, 'easeOut').then(() => engine.destroy(s));
     }
   },
 
@@ -153,6 +218,10 @@ export default {
         // Pop animations
         engine.fx.pop(cardA);
         engine.fx.pop(cardB);
+
+        // Burst matching stars
+        this._burstSparkles(cardA.x, cardA.y, engine);
+        this._burstSparkles(cardB.x, cardB.y, engine);
 
         this.score++;
         this.scoreLabel.text = `⭐ ${this.score}`;
@@ -199,6 +268,10 @@ export default {
     const gamingCenterY = titleH + availH / 2;
     this.gridStartX = engine.width / 2 - (this.gridSpacing * 1.5);
     this.gridStartY = gamingCenterY - this.gridSpacing;
+
+    if (this.bgGraphic) {
+      this._drawBackground(engine);
+    }
 
     // Reposition score label
     if (this.scoreLabel) {

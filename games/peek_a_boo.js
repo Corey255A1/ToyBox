@@ -33,6 +33,8 @@ export default {
   },
 
   init(engine) {
+    if (this.bgGraphic) engine.destroy(this.bgGraphic);
+
     this.doorAngle = 0;
     this.angularVelocity = 0;
     this.doorState = 'CLOSED'; // 'CLOSED' | 'OPENING' | 'OPEN' | 'CLOSING'
@@ -58,6 +60,9 @@ export default {
       y: Math.max(30, engine.height * 0.08),
       zIndex: 10
     });
+    if (this.promptLabel.style) {
+      this.promptLabel.style.fontWeight = 'bold';
+    }
  
     // Spawn Animal Sprite first (behind the door)
     this.animalBaseY = engine.height / 2;
@@ -123,6 +128,9 @@ export default {
       y: engine.height / 2 + this.doorH / 2 + Math.max(15, engine.height * 0.05),
       zIndex: 10
     });
+    if (this.hintLabel.style) {
+      this.hintLabel.style.fontWeight = 'bold';
+    }
  
     // Create progress dots at bottom
     this.progressDots = [];
@@ -140,7 +148,47 @@ export default {
       this.progressDots.push(dot);
     }
  
+    // Spawn background graphic node (zIndex 0)
+    this.bgGraphic = engine.spawn({
+      id: 'pab_bg',
+      x: 0,
+      y: 0,
+      zIndex: 0
+    });
+    this.bgGraphicsDraw = new PIXI.Graphics();
+    this.bgGraphic.addChild(this.bgGraphicsDraw);
+    this._drawBackground(engine);
+
     this.nameLabelBig = null;
+  },
+
+  _drawBackground(engine) {
+    if (!this.bgGraphicsDraw) return;
+    this.bgGraphicsDraw.clear();
+    
+    // Cozy room wall wallpaper gradient (light pink to soft blue-indigo)
+    const steps = 12;
+    const stepH = engine.height / steps;
+    for (let i = 0; i < steps; i++) {
+      const ratio = i / (steps - 1);
+      const r = Math.floor(0xfc - (0xfc - 0xe8) * ratio);
+      const g = Math.floor(0xe4 + (0xea - 0xe4) * ratio);
+      const b = Math.floor(0xec + (0xf6 - 0xec) * ratio);
+      const hexColor = (r << 16) | (g << 8) | b;
+      this.bgGraphicsDraw.rect(0, i * stepH, engine.width, stepH + 1).fill(hexColor);
+    }
+    
+    // Vertical striped wallpaper pattern
+    const numLines = 16;
+    const lineSpacing = engine.width / numLines;
+    for (let i = 0; i <= numLines; i++) {
+      this.bgGraphicsDraw.rect(i * lineSpacing, 0, 2, engine.height).fill({ color: 0xffffff, alpha: 0.15 });
+    }
+
+    // Cozy brown baseboard & floor at the bottom
+    const floorH = Math.max(60, engine.height * 0.18);
+    this.bgGraphicsDraw.rect(0, engine.height - floorH, engine.width, floorH).fill(0x8d6e63); // warm wood floor
+    this.bgGraphicsDraw.rect(0, engine.height - floorH, engine.width, 12).fill(0x6d4c41); // baseboard line
   },
  
   update(engine, deltaTime) {
@@ -217,6 +265,10 @@ export default {
       this.promptLabel.y = Math.max(30, engine.height * 0.08);
     }
  
+    if (this.bgGraphic) {
+      this._drawBackground(engine);
+    }
+
     if (this.animalSprite) {
       this.animalSprite.x = engine.width / 2;
       this.animalSprite.y = this.animalBaseY;

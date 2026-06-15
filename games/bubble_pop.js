@@ -25,10 +25,16 @@ export default {
   },
 
   init(engine) {
+    if (this.bgGraphic) engine.destroy(this.bgGraphic);
+    if (this.ambientBubbles) {
+      this.ambientBubbles.forEach(b => engine.destroy(b));
+    }
+
     this.score          = 0;
     this.targetScore    = 10;
     this.bubbles        = [];
     this.particles      = [];
+    this.ambientBubbles  = [];
     this.isRoundEnd     = false;
     this.spawnTimer     = 0;
     this.spawnInterval  = 0.9;
@@ -94,10 +100,45 @@ export default {
       this.promptBg.scale.y = 0.8;
     }
 
+    // 0. Ambient ocean background setup (zIndex 0)
+    this.bgGraphic = engine.spawn({
+      id: 'bubble_pop_bg',
+      x: 0,
+      y: 0,
+      zIndex: 0
+    });
+    this.bgGraphicsDraw = new PIXI.Graphics();
+    this.bgGraphic.addChild(this.bgGraphicsDraw);
+    this._drawBackground(engine);
+
     // Spawn first batch of bubbles immediately
     for (let i = 0; i < 4; i++) {
       this._spawnBubble(engine, true);
     }
+  },
+
+  _drawBackground(engine) {
+    if (!this.bgGraphicsDraw) return;
+    this.bgGraphicsDraw.clear();
+    
+    // Draw modern ocean gradient
+    const steps = 15;
+    const stepH = engine.height / steps;
+    for (let i = 0; i < steps; i++) {
+      const ratio = i / (steps - 1);
+      const r = Math.floor(0x0e + (0x05 - 0x0e) * ratio);
+      const g = Math.floor(0x24 + (0x0e - 0x24) * ratio);
+      const b = Math.floor(0x4a + (0x1f - 0x4a) * ratio);
+      const hexColor = (r << 16) | (g << 8) | b;
+      this.bgGraphicsDraw.rect(0, i * stepH, engine.width, stepH + 1).fill(hexColor);
+    }
+    
+    // Wavy Kelp silhouettes at the bottom
+    this.bgGraphicsDraw.moveTo(0, engine.height)
+                       .bezierCurveTo(engine.width * 0.1, engine.height - 40, engine.width * 0.2, engine.height - 80, engine.width * 0.35, engine.height)
+                       .bezierCurveTo(engine.width * 0.5, engine.height - 30, engine.width * 0.6, engine.height - 90, engine.width * 0.75, engine.height)
+                       .bezierCurveTo(engine.width * 0.85, engine.height - 20, engine.width * 0.95, engine.height - 50, engine.width, engine.height)
+                       .fill({ color: 0x030d1b, alpha: 0.5 });
   },
 
   update(engine, deltaTime) {
@@ -117,6 +158,41 @@ export default {
       }
       return true;
     });
+
+    // Move ambient background bubbles
+    if (this.ambientBubbles) {
+      this.ambientBubbles = this.ambientBubbles.filter((ab) => {
+        ab.y -= ab._speed * deltaTime;
+        ab._wobble += ab._wobbleSpeed * deltaTime;
+        ab.x = ab._startX + Math.sin(ab._wobble) * ab._wobbleAmp;
+        if (ab.y < -50) {
+          engine.destroy(ab);
+          return false;
+        }
+        return true;
+      });
+
+      // Periodically spawn ambient background bubbles
+      if (!this.isRoundEnd && Math.random() < 0.04 && this.ambientBubbles.length < 8) {
+        const abScale = 0.15 + Math.random() * 0.25;
+        const abX = Math.random() * engine.width;
+        const ab = engine.spawn({
+          id: `ambient_bubble_${Date.now()}_${Math.random()}`,
+          asset: 'bubble_blue',
+          x: abX,
+          y: engine.height + 40,
+          scale: abScale,
+          zIndex: 1
+        });
+        ab.alpha = 0.12 + Math.random() * 0.12;
+        ab._speed = 18 + Math.random() * 20;
+        ab._wobble = Math.random() * Math.PI * 2;
+        ab._wobbleSpeed = 0.4 + Math.random() * 0.4;
+        ab._wobbleAmp = 4 + Math.random() * 6;
+        ab._startX = abX;
+        this.ambientBubbles.push(ab);
+      }
+    }
 
     // Move and fade particles
     this.particles = this.particles.filter((p) => {
@@ -159,6 +235,13 @@ export default {
     if (this._winTimer > 0) {
       this._winTimer -= deltaTime;
       if (this._winTimer <= 0) {
+        // Clean up background and ambient bubbles
+        if (this.bgGraphic) engine.destroy(this.bgGraphic);
+        if (this.ambientBubbles) {
+          this.ambientBubbles.forEach(b => engine.destroy(b));
+          this.ambientBubbles = [];
+        }
+
         engine.system.triggerWinState({
           title: 'YOU POPPED THEM ALL!',
           message: `Fabulous work! You found 10 ${this.targetTheme}!`,
@@ -180,6 +263,17 @@ export default {
         b._startX *= ratioX;
         b.x *= ratioX;
       });
+    }
+
+    if (this.ambientBubbles) {
+      this.ambientBubbles.forEach((ab) => {
+        ab._startX *= ratioX;
+        ab.x *= ratioX;
+      });
+    }
+
+    if (this.bgGraphic) {
+      this._drawBackground(engine);
     }
 
     if (this.scoreLabel) {

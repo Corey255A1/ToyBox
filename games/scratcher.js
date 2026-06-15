@@ -182,6 +182,23 @@ export default {
       this.animalY = top + cardH / 2 + this.animalRy * (h - cardH);
     }
 
+    if (this.bgGraphic) {
+      this.bgGraphicsDraw.clear();
+      // Draw modern polished wood background floorboards
+      this.bgGraphicsDraw.rect(0, 0, engine.width, engine.height).fill(0x2d1b13);
+      const numPlanks = 8;
+      const plankW = engine.width / numPlanks;
+      for (let i = 1; i < numPlanks; i++) {
+        this.bgGraphicsDraw.rect(i * plankW - 2, 0, 4, engine.height).fill({ color: 0x1e100a, alpha: 0.6 });
+      }
+      // Warm border vignettes
+      for (let i = 1; i <= 6; i++) {
+        const pad = i * 40;
+        this.bgGraphicsDraw.rect(pad, pad, engine.width - pad * 2, engine.height - pad * 2)
+                           .stroke({ color: 0x000000, width: 40, alpha: 0.06 });
+      }
+    }
+
     if (this.revealSprite) {
       if (this.autoCompleting) {
         this.revealSprite.x = engine.width / 2;
@@ -195,12 +212,29 @@ export default {
     }
 
     if (this.scratchBg) {
-      this.scratchBg.x = 0;
-      this.scratchBg.y = 0;
+      this.scratchBg.x = this.animalX;
+      this.scratchBg.y = this.animalY;
       
       this.scratchGraphics.clear();
-      this.scratchGraphics.rect(left, top, w, h).fill(0x7f8c8d); // solid grey
-      this.scratchGraphics.rect(left, top, w, h).stroke({ color: 0x95a5a6, width: 4 }); // border
+      
+      // Beautiful card base
+      this.scratchGraphics.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 16).fill(0xbfbfbf); // metallic silver card
+      
+      // Double border: gold and white
+      this.scratchGraphics.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 16).stroke({ color: 0xd4af37, width: 6 }); // gold
+      this.scratchGraphics.roundRect(-cardW / 2 + 5, -cardH / 2 + 5, cardW - 10, cardH - 10, 12).stroke({ color: 0xffffff, width: 2 }); // inner white
+      
+      // Subtle sparkles on the card surface
+      this.scratchGraphics.circle(-cardW * 0.3, -cardH * 0.3, 4).fill(0xffffff);
+      this.scratchGraphics.circle(cardW * 0.3, -cardH * 0.2, 3).fill(0xffffff);
+      this.scratchGraphics.circle(-cardW * 0.2, cardH * 0.3, 5).fill(0xffffff);
+      this.scratchGraphics.circle(cardW * 0.25, cardH * 0.25, 4).fill(0xffffff);
+    }
+
+    if (this.mysteryLabel) {
+      this.mysteryLabel.x = 0;
+      this.mysteryLabel.y = 0;
+      this.mysteryLabel.style.fontSize = Math.max(20, Math.min(26, cardH * 0.16));
     }
 
     if (this.nameLabel) {
@@ -254,18 +288,68 @@ export default {
     this.animalX = left + cardW / 2 + this.animalRx * (w - cardW);
     this.animalY = top + cardH / 2 + this.animalRy * (h - cardH);
 
+    // 0. Ambient wood vignette background (zIndex 0)
+    this.bgGraphic = engine.spawn({
+      id: 'scratcher_bg',
+      x: 0,
+      y: 0,
+      zIndex: 0
+    });
+    this.bgGraphicsDraw = new PIXI.Graphics();
+    this.bgGraphic.addChild(this.bgGraphicsDraw);
+
+    this.bgGraphicsDraw.rect(0, 0, engine.width, engine.height).fill(0x2d1b13);
+    const numPlanks = 8;
+    const plankW = engine.width / numPlanks;
+    for (let i = 1; i < numPlanks; i++) {
+      this.bgGraphicsDraw.rect(i * plankW - 2, 0, 4, engine.height).fill({ color: 0x1e100a, alpha: 0.6 });
+    }
+    for (let i = 1; i <= 6; i++) {
+      const pad = i * 40;
+      this.bgGraphicsDraw.rect(pad, pad, engine.width - pad * 2, engine.height - pad * 2)
+                         .stroke({ color: 0x000000, width: 40, alpha: 0.06 });
+    }
+
     // 1. Bottom Layer: Solid grey card (zIndex 1)
     this.scratchBg = engine.spawn({
       id: 'scratch_bg',
-      x: 0,
-      y: 0,
+      x: this.animalX,
+      y: this.animalY,
       zIndex: 1
     });
     this.scratchGraphics = new PIXI.Graphics();
     this.scratchBg.addChild(this.scratchGraphics);
 
-    this.scratchGraphics.rect(left, top, w, h).fill(0x7f8c8d);
-    this.scratchGraphics.rect(left, top, w, h).stroke({ color: 0x95a5a6, width: 4 });
+    this.scratchGraphics.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 16).fill(0xbfbfbf);
+    this.scratchGraphics.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 16).stroke({ color: 0xd4af37, width: 6 });
+    this.scratchGraphics.roundRect(-cardW / 2 + 5, -cardH / 2 + 5, cardW - 10, cardH - 10, 12).stroke({ color: 0xffffff, width: 2 });
+    
+    // Sparkles on card
+    this.scratchGraphics.circle(-cardW * 0.3, -cardH * 0.3, 4).fill(0xffffff);
+    this.scratchGraphics.circle(cardW * 0.3, -cardH * 0.2, 3).fill(0xffffff);
+    this.scratchGraphics.circle(-cardW * 0.2, cardH * 0.3, 5).fill(0xffffff);
+    this.scratchGraphics.circle(cardW * 0.25, cardH * 0.25, 4).fill(0xffffff);
+
+    // Mystery Scratch Me label
+    this.mysteryLabel = engine.spawn({
+      id: 'mystery_label',
+      text: '❓\nScratch Me!',
+      fontSize: Math.max(20, Math.min(26, cardH * 0.16)),
+      color: '#ffd700',
+      x: 0,
+      y: 0,
+      zIndex: 10
+    });
+    if (this.mysteryLabel.style) {
+      this.mysteryLabel.style.align = 'center';
+      this.mysteryLabel.style.fontWeight = 'bold';
+      this.mysteryLabel.style.stroke = '#1b1008';
+      this.mysteryLabel.style.strokeThickness = 4;
+    }
+    if (this.mysteryLabel.parent) this.mysteryLabel.parent.removeChild(this.mysteryLabel);
+    this.scratchBg.addChild(this.mysteryLabel);
+    this.mysteryLabel.x = 0;
+    this.mysteryLabel.y = 0;
 
     // 2. Top Layer: Colorful animal card (zIndex 2) - scaled down and placed randomly
     this.revealSprite = engine.spawn({
@@ -475,6 +559,7 @@ export default {
     engine.destroy(this.revealSprite);
     engine.destroy(this.scratchBg);
     if (this.maskContainer) engine.destroy(this.maskContainer);
+    if (this.bgGraphic) engine.destroy(this.bgGraphic);
 
     this.imageIndex++;
     if (this.imageIndex < this.imageQueue.length) {
