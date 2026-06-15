@@ -5,6 +5,9 @@ import { evaluateModule } from './loader.js';
 // All active preview contexts (canvas → PreviewContext)
 const activeContexts = new Map();
 
+// Cache of evaluated game modules to drastically speed up preview loading
+const moduleCache = new Map();
+
 // Global shared tween array or simple tween handler for preview animations
 const activeTweens = [];
 
@@ -80,13 +83,16 @@ export async function initPreviewer(canvas, gameEntry, source) {
   // Stop any existing preview on this canvas
   stopPreviewer(canvas);
 
-  let gameModule;
-  try {
-    gameModule = await evaluateModule(source);
-  } catch (err) {
-    console.warn(`[ToyBox/Preview] Failed to load module for ${gameEntry.id}:`, err);
-    renderFallbackPreview(canvas, gameEntry);
-    return;
+  let gameModule = moduleCache.get(gameEntry.id);
+  if (!gameModule) {
+    try {
+      gameModule = await evaluateModule(source);
+      moduleCache.set(gameEntry.id, gameModule);
+    } catch (err) {
+      console.warn(`[ToyBox/Preview] Failed to load module for ${gameEntry.id}:`, err);
+      renderFallbackPreview(canvas, gameEntry);
+      return;
+    }
   }
 
   // If no preview method, show fallback
@@ -219,6 +225,7 @@ function buildCanvas2DMiniEngine(canvas) {
         text:  options.text ?? null,
         asset: options.asset ?? null,
         tint:  options.tint ?? null,
+        render: options.render ?? null,
         _destroyed: false,
       };
       entities.push(entity);
@@ -257,7 +264,9 @@ function buildCanvas2DMiniEngine(canvas) {
 
         const color = e.color || '#e94560';
 
-        if (e.text) {
+        if (typeof e.render === 'function') {
+          e.render(ctx);
+        } else if (e.text) {
           ctx.fillStyle = color;
           ctx.font      = `bold 14px Nunito, sans-serif`;
           ctx.textAlign = 'center';

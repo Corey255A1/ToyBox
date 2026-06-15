@@ -65,18 +65,32 @@ btnExitGame.addEventListener('pointerdown', () => {
 
 // ── Live Preview Bootstrapping ────────────────────────────────────────────────
 async function initAllPreviews(games) {
-  for (let i = 0; i < games.length; i++) {
-    const game = games[i];
+  // Fetch game sources in parallel to maximize network/cache loading speed
+  const sourcePromises = games.map(async (game) => {
+    try {
+      const source = await resolveGameSource(game);
+      return { game, source };
+    } catch (err) {
+      console.warn(`[ToyBox] Failed to resolve game source for ${game.id}:`, err);
+      return { game, source: null };
+    }
+  });
 
-    // Stagger initialization by 150ms to prevent performance spikes
-    await new Promise(resolve => setTimeout(resolve, i * 150));
+  const resolved = await Promise.all(sourcePromises);
+
+  // Initialize previews sequentially with a small, flat 50ms stagger
+  for (let i = 0; i < resolved.length; i++) {
+    const { game, source } = resolved[i];
+    if (!source) continue;
 
     const canvas = document.getElementById(`preview-canvas-${game.id}`);
     if (!canvas) continue;
 
+    if (i > 0) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
     try {
-      const source = await resolveGameSource(game);
-      // Fire-and-forget preview initialization
       initPreviewer(canvas, game, source);
     } catch (err) {
       console.warn(`[ToyBox] Preview initialization failed for ${game.id}:`, err);

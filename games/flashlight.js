@@ -1,7 +1,7 @@
 // games/flashlight.js
 // ToyBox Mini-Game: Flashlight
 // Target age: 2–5 years | Interaction: Drag | Duration: ~3 min
-
+console.log("A");
 const SCENE_CONFIGS = {
   scene_jungle: {
     bg: 'bg_jungle',
@@ -71,6 +71,7 @@ export default {
     this.activeLabels = [];
     this.glowPulsate = 0;
     this._winTimer = 0;
+    this.isPressed = false;
 
     // Header Prompt
     this.promptLabel = engine.spawn({
@@ -95,21 +96,35 @@ export default {
 
     this.glowPulsate += deltaTime * 4;
 
+    // Update active pressed state and position from touches
+    this.isPressed = this.isPreviewMode || (engine.input.touches.length > 0);
+    if (engine.input.touches.length > 0) {
+      const touch = engine.input.touches[0];
+      this.lightX = touch.x;
+      this.lightY = touch.y;
+    }
+
     // 1. Redraw darkness overlay with cutout hole
     if (this.darknessGraphics && !this.isPreviewMode) {
       this.darknessGraphics.clear();
-      this.darknessGraphics.rect(0, 0, engine.width, engine.height).fill({ color: 0x070714, alpha: this.darknessAlpha });
       
-      // Draw penumbra erase circles (FL-1: gradual center to edge penumbra)
-      if (this.darknessAlpha > 0) {
-        this.hole.clear();
-        const RINGS = 10;
-        for (let i = RINGS; i >= 0; i--) {
-          const frac   = i / RINGS;
-          const r      = this.beamRadius * frac;
-          const eAlpha = 1.0 - frac; // full erase at centre, 0 at outer edge
-          this.hole.circle(this.lightX, this.lightY, r)
-            .fill({ color: 0xffffff, alpha: eAlpha });
+      // Main dark screen
+      this.darknessGraphics.rect(0, 0, engine.width, engine.height)
+                           .fill({ color: 0x070714, alpha: this.darknessAlpha });
+      
+      if (this.darknessAlpha > 0 && this.isPressed) {
+        // Cut out the flashlight hole
+        this.darknessGraphics.circle(this.lightX, this.lightY, this.beamRadius)
+                             .cut();
+
+        // Draw soft feathered dark rings inside the hole (penumbra effect)
+        const RINGS = 5;
+        const strokeWidth = 12;
+        for (let i = 1; i <= RINGS; i++) {
+          const r = this.beamRadius - (i - 0.5) * strokeWidth;
+          const ringAlpha = (1.0 - (i / (RINGS + 1))) * this.darknessAlpha;
+          this.darknessGraphics.circle(this.lightX, this.lightY, r)
+                               .stroke({ color: 0x070714, width: strokeWidth + 1, alpha: ringAlpha * 0.25 });
         }
       }
     }
@@ -152,12 +167,7 @@ export default {
   },
 
   onEvent(engine, eventName, payload) {
-    if (this.isPreviewMode || this.isTransitioning) return;
-
-    if (eventName === 'touch_move' || eventName === 'touch_down' || eventName === 'drag_start') {
-      this.lightX = payload.x;
-      this.lightY = payload.y;
-    }
+    // Handled dynamically in update() using active touch pointer states
   },
 
   onResize(engine) {
@@ -217,8 +227,9 @@ export default {
 
   _loadScene(engine) {
     this.isTransitioning = false;
+    this.isPressed = false;
     this.discoveredCount = 0;
-    this.darknessAlpha = 0.88;
+    this.darknessAlpha = 0.99;
     this._winTimer = 0;
     this.activeLabels = [];
 
@@ -323,16 +334,14 @@ export default {
       this.darknessGraphics = new PIXI.Graphics();
       this.darkness.addChild(this.darknessGraphics);
 
-      this.darknessGraphics.rect(0, 0, engine.width, engine.height).fill({ color: 0x070714, alpha: this.darknessAlpha });
-
-      // Hole Graphics added as child of darknessGraphics with ERASE blendMode
-      this.hole = new PIXI.Graphics();
-      this.hole.blendMode = 'erase';
-      this.darknessGraphics.addChild(this.hole);
+      this.darknessGraphics.rect(0, 0, engine.width, engine.height)
+                           .fill({ color: 0x070714, alpha: this.darknessAlpha });
     }
   },
 
   _updateDiscovery(engine, dt) {
+    if (this.isTransitioning) return;
+
     let allDiscovered = true;
 
     this.hiddenObjects.forEach((obj) => {
@@ -345,7 +354,7 @@ export default {
       const dy = obj.y - this.lightY;
       const dist = Math.sqrt(dx*dx + dy*dy);
 
-      if (dist < this.beamRadius * 0.85) {
+      if (this.isPressed && dist < this.beamRadius * 0.85) {
         // Object is illuminated: fade in!
         obj.sprite.alpha = Math.min(1.0, obj.sprite.alpha + 3.0 * dt);
 
@@ -359,7 +368,7 @@ export default {
           this._discoverItem(obj, engine);
         }
       } else {
-        // FL-4: Fades back out if not discovered yet, with minimum alpha floor to prevent edge flicker
+        // Fades back out if not discovered yet, with minimum alpha floor to prevent edge flicker
         obj.sprite.alpha = Math.max(0.05, obj.sprite.alpha - 1.5 * dt);
         obj.glow.visible = false;
       }

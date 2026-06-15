@@ -46,8 +46,8 @@
   },
   {
     "id": "ball-launch",
-    "title": "Ball Launch Physics",
-    "description": "Launch the ball and watch it pop balloons with magnet assist!",
+    "title": "Basketball Shootout",
+    "description": "Launch the basketball through the hoop to score points!",
     "icon": "ball_main",
     "scriptPath": "games/ball_launch.js",
     "ageRange": "4-6",

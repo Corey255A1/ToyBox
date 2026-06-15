@@ -144,20 +144,20 @@ export default {
   },
  
   update(engine, deltaTime) {
-    // 1. Spring physics for door rotation (PAB-5: stiffness = 8.0, damping = 0.4)
+    // 1. Spring physics for door rotation (Euler spring integration for bouncy snaps)
     const targetAngle = (this.doorState === 'OPEN' || this.doorState === 'OPENING') ? -Math.PI * 0.75 : 0;
-    const stiffness = 8.0;
-    const damping = 0.4;
+    const stiffness = 160.0;
+    const damping = 9.0;
  
-    this.angularVelocity += (targetAngle - this.doorAngle) * stiffness * deltaTime;
-    this.angularVelocity *= (1 - damping);
+    const acceleration = (targetAngle - this.doorAngle) * stiffness - this.angularVelocity * damping;
+    this.angularVelocity += acceleration * deltaTime;
     this.doorAngle += this.angularVelocity * deltaTime;
     this.doorSprite.rotation = this.doorAngle;
  
     // 2. Door state machine
     if (this.doorState === 'OPENING') {
       // Transition to OPEN when close enough
-      if (Math.abs(this.doorAngle - targetAngle) < 0.02 && Math.abs(this.angularVelocity) < 0.05) {
+      if (Math.abs(this.doorAngle - targetAngle) < 0.05 && Math.abs(this.angularVelocity) < 0.25) {
         this.doorState = 'OPEN';
         this.openTimer = 2.5; // Stay open for 2.5 seconds
  
@@ -190,7 +190,7 @@ export default {
       }
     } else if (this.doorState === 'CLOSING') {
       // Transition to CLOSED when door is back in place
-      if (Math.abs(this.doorAngle) < 0.02 && Math.abs(this.angularVelocity) < 0.05) {
+      if (Math.abs(this.doorAngle) < 0.05 && Math.abs(this.angularVelocity) < 0.25) {
         this.doorAngle = 0;
         this.doorSprite.rotation = 0;
         this.doorState = 'CLOSED';

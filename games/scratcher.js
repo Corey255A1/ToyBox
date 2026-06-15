@@ -1,5 +1,5 @@
 // games/scratcher.js
-// ToyBox Mini-Game: Scratcher
+// ToyBox Mini-Game: Scratcher (Random Location Edition)
 // Target age: 2–5 years | Interaction: Drag | Duration: ~3 min
 
 const REVEAL_KEYS = ['reveal_cow', 'reveal_duck', 'reveal_lion', 'reveal_rocket', 'reveal_butterfly', 'reveal_turtle'];
@@ -33,6 +33,10 @@ export default {
     this.chips = [];
     this.sparkleTimer = 0;
     this._nextSceneTimer = 0;
+    
+    // Drag stroke tracking
+    this.lastScratchX = null;
+    this.lastScratchY = null;
 
     // Load first image
     this._loadImage(engine);
@@ -48,7 +52,7 @@ export default {
       zIndex: 10
     });
 
-    // Image Progress Counter (SC-5)
+    // Image Progress Counter
     this.counterLabel = engine.spawn({
       id: 'image_counter',
       text: `🖼 1 / ${this.imageQueue.length}`,
@@ -89,9 +93,9 @@ export default {
       this.scratchSoundTimer -= deltaTime;
     }
 
-    // Update progress bar
+    // Update progress bar scale relative to 75% reveal threshold
     if (this.progFill) {
-      const targetScale = Math.min(1, this.revealPercent / 0.3);
+      const targetScale = Math.min(1, this.revealPercent / 0.75);
       this.progFill.scale.x = targetScale;
     }
 
@@ -103,7 +107,7 @@ export default {
       }
     }
 
-    // Update scratch particles (chips) (SC-2)
+    // Update scratch particles (chips)
     this.chips = this.chips.filter((c) => {
       c._vy += 300 * deltaTime; // gravity
       c.x += c._vx * deltaTime;
@@ -120,7 +124,7 @@ export default {
     if (this._nextSceneTimer > 0) {
       this._nextSceneTimer -= deltaTime;
       if (this._nextSceneTimer <= 0) {
-        this._nextScene(engine);
+        this._doNextScene(engine);
       }
     }
   },
@@ -128,16 +132,18 @@ export default {
   onEvent(engine, eventName, payload) {
     if (this.isPreviewMode || this.autoCompleting) return;
 
+    const { x, y } = payload;
+
     if (eventName === 'touch_down' || eventName === 'drag_start') {
       this._currentBrushR = this.brushR;
-      const { x, y } = payload;
+      this.lastScratchX = x;
+      this.lastScratchY = y;
       this._scratchAt(x, y, engine);
     } else if (eventName === 'touch_move') {
-      this._currentBrushR = Math.min(this.brushR * 2.0, (this._currentBrushR || this.brushR) * 1.08);
-      const { x, y } = payload;
       this._scratchAt(x, y, engine);
     } else if (eventName === 'drag_end') {
-      this._currentBrushR = this.brushR;
+      this.lastScratchX = null;
+      this.lastScratchY = null;
     }
   },
 
@@ -162,21 +168,39 @@ export default {
     }
 
     const scale = Math.max(engine.width / 1024, engine.height / 768);
+    const w = 1024 * scale;
+    const h = 768 * scale;
+    const left = engine.width / 2 - w / 2;
+    const top = engine.height / 2 - h / 2;
+
+    const cardW = w * 0.35;
+    const cardH = h * 0.35;
+
+    // Recalculate animal position from relative scale
+    if (this.animalRx !== undefined) {
+      this.animalX = left + cardW / 2 + this.animalRx * (w - cardW);
+      this.animalY = top + cardH / 2 + this.animalRy * (h - cardH);
+    }
+
     if (this.revealSprite) {
-      this.revealSprite.x = engine.width / 2;
-      this.revealSprite.y = engine.height / 2;
-      this.revealSprite.scale.set(scale);
+      if (this.autoCompleting) {
+        this.revealSprite.x = engine.width / 2;
+        this.revealSprite.y = engine.height / 2;
+        this.revealSprite.scale.set(scale);
+      } else {
+        this.revealSprite.x = this.animalX;
+        this.revealSprite.y = this.animalY;
+        this.revealSprite.scale.set(scale * 0.35);
+      }
     }
 
     if (this.scratchBg) {
-      this.scratchBg.x = engine.width / 2;
-      this.scratchBg.y = engine.height / 2;
-      if (this.revealSprite) {
-        this.scratchBg.width = this.revealSprite.width;
-        this.scratchBg.height = this.revealSprite.height;
-      } else {
-        this.scratchBg.scale.set(Math.max(engine.width / 300, engine.height / 200));
-      }
+      this.scratchBg.x = 0;
+      this.scratchBg.y = 0;
+      
+      this.scratchGraphics.clear();
+      this.scratchGraphics.rect(left, top, w, h).fill(0x7f8c8d); // solid grey
+      this.scratchGraphics.rect(left, top, w, h).stroke({ color: 0x95a5a6, width: 4 }); // border
     }
 
     if (this.nameLabel) {
@@ -185,33 +209,18 @@ export default {
       this.nameLabel.style.fontSize = Math.max(64, engine.height * 0.12);
     }
 
-    if (!this.isPreviewMode && this.maskTexture) {
-      this.maskTexture.resize(engine.width, engine.height);
+    this.brushR = engine.width * 0.07;
+    this._currentBrushR = this.brushR;
+    this.cellW = cardW / this.gridCols;
+    this.cellH = cardH / this.gridRows;
 
-      const clearG = new PIXI.Graphics();
-      clearG.rect(0, 0, engine.width, engine.height).fill(0xffffff);
-      engine.renderToTexture(clearG, this.maskTexture, true);
-      clearG.destroy();
-
-      this.brushR = engine.width * 0.07;
-
-      if (this.brushGraphics && this.grid) {
-        this.brushGraphics.clear();
-        const cellW = engine.width / (this.gridCols || 10);
-        const cellH = engine.height / (this.gridRows || 8);
-        for (let c = 0; c < (this.gridCols || 10); c++) {
-          for (let r = 0; r < (this.gridRows || 8); r++) {
-            const idx = r * (this.gridCols || 10) + c;
-            if (this.grid[idx]) {
-              const cx = c * cellW + cellW / 2;
-              const cy = r * cellH + cellH / 2;
-              this.brushGraphics.circle(cx, cy, this.brushR);
-            }
-          }
-        }
-        this.brushGraphics.fill(0xffffff);
-        engine.renderToTexture(this.brushGraphics, this.maskTexture, false);
-      }
+    // Redraw mask graphics scratches
+    if (this.maskGraphics && this.scratches.length > 0) {
+      this.maskGraphics.clear();
+      this.scratches.forEach((s) => {
+        this.maskGraphics.circle(s.x, s.y, s.r);
+      });
+      this.maskGraphics.fill(0xffffff);
     }
   },
 
@@ -220,6 +229,11 @@ export default {
     this.cellsRevealed = 0;
     this.revealPercent = 0;
     this._nextSceneTimer = 0;
+    this.scratches = [];
+
+    // Generate relative coordinates inside the card boundaries
+    this.animalRx = 0.05 + Math.random() * 0.9;
+    this.animalRy = 0.05 + Math.random() * 0.9;
 
     const currentKey = this.imageQueue[this.imageIndex];
 
@@ -227,83 +241,102 @@ export default {
       this.counterLabel.text = `🖼 ${this.imageIndex + 1} / ${this.imageQueue.length}`;
     }
 
-    // Background Layer: The colorful animal image to reveal (zIndex 1)
+    const scale = Math.max(engine.width / 1024, engine.height / 768);
+    const w = 1024 * scale;
+    const h = 768 * scale;
+    const left = engine.width / 2 - w / 2;
+    const top = engine.height / 2 - h / 2;
+
+    const cardW = w * 0.35;
+    const cardH = h * 0.35;
+
+    // Calculate absolute positions using the random relative ratios
+    this.animalX = left + cardW / 2 + this.animalRx * (w - cardW);
+    this.animalY = top + cardH / 2 + this.animalRy * (h - cardH);
+
+    // 1. Bottom Layer: Solid grey card (zIndex 1)
+    this.scratchBg = engine.spawn({
+      id: 'scratch_bg',
+      x: 0,
+      y: 0,
+      zIndex: 1
+    });
+    this.scratchGraphics = new PIXI.Graphics();
+    this.scratchBg.addChild(this.scratchGraphics);
+
+    this.scratchGraphics.rect(left, top, w, h).fill(0x7f8c8d);
+    this.scratchGraphics.rect(left, top, w, h).stroke({ color: 0x95a5a6, width: 4 });
+
+    // 2. Top Layer: Colorful animal card (zIndex 2) - scaled down and placed randomly
     this.revealSprite = engine.spawn({
       id: 'reveal_sprite',
       asset: currentKey,
-      x: engine.width / 2,
-      y: engine.height / 2,
-      zIndex: 1
-    });
-    const scale = Math.max(engine.width / 1024, engine.height / 768);
-    this.revealSprite.scale.set(scale);
-
-    // Foreground Layer: The scratch surface card on top (zIndex 2)
-    this.scratchBg = engine.spawn({
-      id: 'scratch_bg',
-      asset: 'scratch_surface',
-      x: engine.width / 2,
-      y: engine.height / 2,
+      x: this.animalX,
+      y: this.animalY,
       zIndex: 2
     });
-    // Scale scratchBg to match the revealSprite dimensions exactly
-    this.scratchBg.width = this.revealSprite.width;
-    this.scratchBg.height = this.revealSprite.height;
+    this.revealSprite.scale.set(scale * 0.35);
 
-    // Grid tracking (10x8)
-    this.gridCols = 10;
-    this.gridRows = 8;
-    this.grid = new Array(this.gridCols * this.gridRows).fill(false);
-    this.totalGridCells = this.gridCols * this.gridRows;
-
-    this.isPreviewMode = !engine.renderToTexture;
+    // 3. Stencil Mask Graphics Layer for revealSprite
+    this.isPreviewMode = (engine.app == null) || (engine.width < 250);
 
     if (!this.isPreviewMode) {
-      // 1. Create WebGL render texture
-      this.maskTexture = PIXI.RenderTexture.create({
-        width: engine.width,
-        height: engine.height
+      this.maskContainer = engine.spawn({
+        id: 'scratch_mask_container',
+        x: 0,
+        y: 0,
+        zIndex: 3
       });
+      
+      this.maskGraphics = new PIXI.Graphics();
+      this.maskContainer.addChild(this.maskGraphics);
 
-      // 2. Create mask sprite (do NOT add to stage, just set as mask)
-      this.maskSprite = new PIXI.Sprite(this.maskTexture);
-      this.scratchBg.mask = this.maskSprite;
+      // Mask revealSprite using maskContainer
+      this.revealSprite.mask = this.maskContainer;
 
-      // 3. Clear mask with solid white (scratchBg opaque everywhere)
-      const clearG = new PIXI.Graphics();
-      clearG.rect(0, 0, engine.width, engine.height).fill(0xffffff);
-      engine.renderToTexture(clearG, this.maskTexture, true);
-      clearG.destroy();
-
-      // 4. Brush settings with erase blendMode
-      this.brushGraphics = new PIXI.Graphics();
-      this.brushGraphics.blendMode = 'erase';
-      this.brushR = engine.width * 0.07; // SC-3
+      this.brushR = engine.width * 0.07;
       this._currentBrushR = this.brushR;
     } else {
       this.revealSprite.alpha = 0;
     }
+
+    // Grid tracking distributed over animal card bounds (8x6)
+    this.gridCols = 8;
+    this.gridRows = 6;
+    this.grid = new Array(this.gridCols * this.gridRows).fill(false);
+    this.totalGridCells = this.gridCols * this.gridRows;
+    this.cellW = cardW / this.gridCols;
+    this.cellH = cardH / this.gridRows;
   },
 
   _scratchAt(x, y, engine) {
     if (this.isPreviewMode || this.autoCompleting) return;
 
-    // 1. Draw irregular brush onto mask texture
-    this.brushGraphics.clear();
-    const offsets = [
-      { dx: 0, dy: 0 },
-      { dx: -this._currentBrushR * 0.35, dy: -this._currentBrushR * 0.25 },
-      { dx: this._currentBrushR * 0.25, dy: this._currentBrushR * 0.35 },
-    ];
-    offsets.forEach(o => {
-      this.brushGraphics.circle(x + o.dx, y + o.dy, this._currentBrushR * 0.85);
-    });
-    this.brushGraphics.fill(0xffffff);
-    engine.renderToTexture(this.brushGraphics, this.maskTexture, false);
+    // Smooth scratching: interpolate points if moving fast
+    if (this.lastScratchX !== null && this.lastScratchY !== null) {
+      const dist = Math.hypot(x - this.lastScratchX, y - this.lastScratchY);
+      const steps = Math.max(1, Math.floor(dist / 8));
+      
+      for (let i = 1; i <= steps; i++) {
+        const tx = this.lastScratchX + (x - this.lastScratchX) * (i / steps);
+        const ty = this.lastScratchY + (y - this.lastScratchY) * (i / steps);
+        this.scratches.push({ x: tx, y: ty, r: this._currentBrushR });
+        this.maskGraphics.circle(tx, ty, this._currentBrushR);
+        this._markGrid(tx, ty);
+      }
+      this.maskGraphics.fill(0xffffff);
+    } else {
+      this.scratches.push({ x, y, r: this._currentBrushR });
+      this.maskGraphics.circle(x, y, this._currentBrushR).fill(0xffffff);
+      this._markGrid(x, y);
+    }
 
-    // 2. Spawn scratch particles (debris)
+    this.lastScratchX = x;
+    this.lastScratchY = y;
+
+    // Spawn scratch metallic particles
     for (let i = 0; i < 2; i++) {
-      const angle = Math.PI * 0.2 + Math.random() * Math.PI * 0.6; // downward arc
+      const angle = Math.PI * 0.2 + Math.random() * Math.PI * 0.6;
       const speed = 60 + Math.random() * 100;
       const chip = engine.spawn({
         id: `chip_${Date.now()}_${Math.random()}`,
@@ -312,22 +345,32 @@ export default {
         scale: 0.4 + Math.random() * 0.4,
         zIndex: 4
       });
-      // Set random metallic tint
       chip.tint = Math.random() < 0.5 ? 0xc0c0c0 : 0xd4af37;
       chip._vx = Math.cos(angle) * speed;
-      chip._vy = -(80 + Math.random() * 40); // upward velocity between -80 and -120 (SC-2)
+      chip._vy = -(80 + Math.random() * 40);
       this.chips.push(chip);
     }
 
-    // 3. Play scratch sound (throttled)
+    // Play scratch sound (throttled)
     if (this.scratchSoundTimer <= 0) {
       engine.audio.play('scratch_loop', { volume: 0.35 });
       this.scratchSoundTimer = 0.15;
     }
 
-    // 4. Update reveal grid
-    const cellW = engine.width / this.gridCols;
-    const cellH = engine.height / this.gridRows;
+    this.revealPercent = this.cellsRevealed / this.totalGridCells;
+
+    // Check threshold (75% to auto-complete reveal)
+    if (this.revealPercent >= 0.75) {
+      this._triggerFlashWipe(engine);
+    }
+  },
+
+  _markGrid(x, y) {
+    const cardW = this.revealSprite.width;
+    const cardH = this.revealSprite.height;
+    const animLeft = this.animalX - cardW / 2;
+    const animTop = this.animalY - cardH / 2;
+    
     const brushR2 = this._currentBrushR * this._currentBrushR;
 
     for (let c = 0; c < this.gridCols; c++) {
@@ -335,8 +378,9 @@ export default {
         const idx = r * this.gridCols + c;
         if (this.grid[idx]) continue;
 
-        const cx = c * cellW + cellW / 2;
-        const cy = r * cellH + cellH / 2;
+        // Center coordinates of cell in screen space
+        const cx = animLeft + c * this.cellW + this.cellW / 2;
+        const cy = animTop + r * this.cellH + this.cellH / 2;
 
         const dx = cx - x;
         const dy = cy - y;
@@ -345,13 +389,6 @@ export default {
           this.cellsRevealed++;
         }
       }
-    }
-
-    this.revealPercent = this.cellsRevealed / this.totalGridCells;
-
-    // Check threshold (30%)
-    if (this.revealPercent >= 0.3) {
-      this._triggerFlashWipe(engine);
     }
   },
 
@@ -371,24 +408,31 @@ export default {
     flashOverlay.height = engine.height;
     flashOverlay.alpha = 0;
 
+    const scale = Math.max(engine.width / 1024, engine.height / 768);
+
     // 2. Animate flash: alpha 0 -> 1 -> 0
     engine.animate(flashOverlay, { alpha: 1.0 }, 0.2, 'easeOut')
       .then(() => {
-        // At full flash opacity, remove the scratch overlay
-        if (!this.isPreviewMode) {
-          const fullG = new PIXI.Graphics();
-          fullG.rect(0, 0, engine.width, engine.height).fill(0xffffff);
-          engine.renderToTexture(fullG, this.maskTexture, true);
-          fullG.destroy();
-        } else {
+        if (this.isPreviewMode) {
           this.revealSprite.alpha = 1;
         }
         
-        // Hide scratchBg instead of destroying (SC-4)
+        // Remove mask from revealSprite
+        this.revealSprite.mask = null;
+        engine.destroy(this.maskContainer);
+
+        // Hide bottom scratchBg card
         this.scratchBg.visible = false;
 
+        // Slide and expand revealSprite to center full screen
+        engine.animate(this.revealSprite, {
+          x: engine.width / 2,
+          y: engine.height / 2,
+          scale: scale
+        }, 0.4, 'easeOut');
+
         // Fade flash out
-        return engine.animate(flashOverlay, { alpha: 0.0 }, 0.3, 'easeIn');
+        return engine.animate(flashOverlay, { alpha: 0.0 }, 0.35, 'easeIn');
       })
       .then(() => {
         engine.destroy(flashOverlay);
@@ -406,7 +450,7 @@ export default {
         this.nameLabel = engine.spawn({
           id: 'subject_name',
           text: subjectName,
-          fontSize: Math.max(64, engine.height * 0.12), // SC-6
+          fontSize: Math.max(64, engine.height * 0.12),
           color: '#ffffff',
           x: engine.width / 2,
           y: engine.height / 2,
@@ -414,7 +458,6 @@ export default {
         });
         this.nameLabel.scale.set(0);
         
-        // Add soft drop shadow using outline
         if (this.nameLabel.style) {
           this.nameLabel.style.stroke = '#2c1810';
           this.nameLabel.style.strokeThickness = 8;
@@ -423,17 +466,15 @@ export default {
         engine.animate(this.nameLabel, { scale: 1.25 }, 0.3, 'easeOut')
           .then(() => engine.animate(this.nameLabel, { scale: 1.0 }, 0.15, 'bounce'));
 
-        // Load next image or exit after 2.5 seconds using delta timer
         this._nextSceneTimer = 2.5;
       });
   },
 
-  _nextScene(engine) {
+  _doNextScene(engine) {
     if (this.nameLabel) engine.destroy(this.nameLabel);
     engine.destroy(this.revealSprite);
-    engine.destroy(this.scratchBg); // Clean up the hidden scratchBg now
+    engine.destroy(this.scratchBg);
     if (this.maskContainer) engine.destroy(this.maskContainer);
-    if (this.brushGraphics) this.brushGraphics.destroy({ children: true });
 
     this.imageIndex++;
     if (this.imageIndex < this.imageQueue.length) {
